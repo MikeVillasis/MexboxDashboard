@@ -4,6 +4,9 @@ import * as THREE from "three";
 import { AvatarBuilder } from "../avatar/AvatarBuilder.js";
 import { RESIDENTS, RESIDENT_SPOTS } from "../avatar/residents.js";
 import { CameraDirector } from "./CameraDirector.js";
+import { PlazaAI } from "../avatar/AvatarAI.js";
+
+const DRAG_THRESHOLD = 6; // px of pointer travel before a press on an avatar becomes a grab
 
 const BLADE_TINT = {
   games: { sky: 0x2f7a1a, floor: 0x1f5a10, light: 0xc8ff9a },
@@ -14,9 +17,13 @@ const BLADE_TINT = {
 };
 
 export class Plaza {
-  constructor(canvas, onFloorClick) {
+  /// callbacks: { floorClick(x, z), avatarClick(dna) }
+  constructor(canvas, callbacks = {}) {
     this.canvas = canvas;
-    this.onFloorClick = onFloorClick;
+    this.callbacks = callbacks;
+    this.ai = new PlazaAI();
+    this.ai.onEvent = (event, a, b) => callbacks.plazaEvent?.(event, a.avatar, b?.avatar);
+    this.press = null; // pointer press in progress: { avatar, x, y, grabbed }
     this.clock = new THREE.Clock();
     this.avatars = new Map(); // id → Avatar
     this.local = null;
@@ -58,7 +65,10 @@ export class Plaza {
     this.pointer = new THREE.Vector2();
     this.builder = new AvatarBuilder().init();
 
-    canvas.addEventListener("pointerdown", (e) => this.handleClick(e));
+    canvas.addEventListener("pointerdown", (e) => this.onPointerDown(e));
+    canvas.addEventListener("pointermove", (e) => this.onPointerMove(e));
+    canvas.addEventListener("pointerup", (e) => this.onPointerUp(e));
+    canvas.addEventListener("pointercancel", (e) => this.onPointerUp(e));
     window.addEventListener("resize", () => this.resize());
     document.addEventListener("visibilitychange", () => this.setRunning(!document.hidden));
     this.resize();
@@ -75,6 +85,8 @@ export class Plaza {
     this.local.root.position.set(0, 0, 0);
     this.scene.add(this.local.root);
     this.avatars.set(dna.id, this.local);
+    this.ai.add(this.local);
+    this.ai.setAnchored(this.local, this.blade === "avatar");
     return this.local;
   }
 
@@ -87,6 +99,7 @@ export class Plaza {
       avatar.root.rotation.y = facing;
       this.scene.add(avatar.root);
       this.avatars.set(dna.id, avatar);
+      this.ai.add(avatar);
     }));
   }
 
@@ -102,25 +115,91 @@ export class Plaza {
     return ring;
   }
 
-  /// Only clicks that fell through empty dashboard glass reach the canvas.
-  handleClick(event) {
+  // Only presses that fell through empty dashboard glass reach the canvas.
+  //   press + release on an avatar          → inspect (gamercard via C#)
+  //   press + drag on an avatar             → grab: it dangles above the floor point under the pointer, drop on release
+  //   press on the floor                    → floor marker (logged to C#)
+
+  setPointer(event) {
     const rect = this.canvas.getBoundingClientRect();
     this.pointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(this.pointer, this.camera);
-    const hit = this.raycaster.intersectObject(this.floor)[0];
-    if (!hit) return;
+  }
 
-    this.marker.position.set(hit.point.x, 0.01, hit.point.z);
+  /// The avatar under the pointer: nearest hit among avatar roots (skinned meshes raycast in their posed shape).
+  pickAvatar() {
+    const roots = [...this.avatars.values()].map((a) => a.root);
+    const hit = this.raycaster.intersectObjects(roots, true)[0];
+    if (!hit) return null;
+    for (let o = hit.object; o; o = o.parent) {
+      const avatar = [...this.avatars.values()].find((a) => a.root === o);
+      if (avatar) return avatar;
+    }
+    return null;
+  }
+
+  floorPoint() { return this.raycaster.intersectObject(this.floor)[0]?.point ?? null; }
+
+  onPointerDown(event) {
+    if (event.button !== 0) return;
+    this.setPointer(event);
+    const avatar = this.pickAvatar();
+    if (avatar) {
+      this.press = { avatar, x: event.clientX, y: event.clientY, grabbed: false };
+      this.canvas.setPointerCapture(event.pointerId);
+      return;
+    }
+    const point = this.floorPoint();
+    if (!point) return;
+    this.marker.position.set(point.x, 0.01, point.z);
     this.marker.material.opacity = 1;
     this.marker.scale.setScalar(0.4);
-    console.log(`3D canvas click at floor (${hit.point.x.toFixed(2)}, ${hit.point.z.toFixed(2)})`);
-    this.onFloorClick?.(hit.point.x, hit.point.z);
+    this.callbacks.floorClick?.(point.x, point.z);
+  }
+
+  onPointerMove(event) {
+    const press = this.press;
+    if (!press) {
+      // Hover feedback: a grab cursor over avatars.
+      this.setPointer(event);
+      this.canvas.style.cursor = this.pickAvatar() ? "grab" : "";
+      return;
+    }
+    if (!press.grabbed && Math.hypot(event.clientX - press.x, event.clientY - press.y) > DRAG_THRESHOLD) {
+      press.grabbed = true;
+      this.ai.grab(press.avatar);
+      this.canvas.style.cursor = "grabbing";
+      this.callbacks.grab?.(press.avatar);
+    }
+    if (press.grabbed) {
+      this.setPointer(event);
+      const point = this.floorPoint();
+      if (point) this.ai.drag(press.avatar, point);
+    }
+  }
+
+  onPointerUp(event) {
+    const press = this.press;
+    if (!press) return;
+    this.press = null;
+    if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
+    this.canvas.style.cursor = "";
+    if (press.grabbed) {
+      this.ai.drop(press.avatar);
+      this.callbacks.drop?.(press.avatar);
+    } else if (event.type === "pointerup") {
+      press.avatar.face.express("happy", 1.2);
+      this.callbacks.avatarClick?.(press.avatar.dna);
+    }
   }
 
   /// Blade change → camera shot + world tint.
   setBlade(blade) {
+    this.blade = blade;
     this.tint = BLADE_TINT[blade] ?? BLADE_TINT.games;
     this.director.set(blade);
+    // The customiser portrait needs the local avatar home and facing the camera.
+    if (this.local) this.ai.setAnchored(this.local, blade === "avatar");
   }
 
   setRunning(running) {
@@ -139,6 +218,7 @@ export class Plaza {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
 
+    this.ai.update(dt);
     for (const avatar of this.avatars.values()) avatar.update(dt);
     this.director.update(dt, t);
 

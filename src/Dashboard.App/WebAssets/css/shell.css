@@ -411,8 +411,8 @@ button { font: inherit; color: inherit; }
 }
 .gamercard-picture {
   width: 128px; height: 128px; border-radius: 10px;
-  background: radial-gradient(circle at 50% 35%, #9bf00b 0 22%, transparent 23%),
-              radial-gradient(ellipse at 50% 100%, #9bf00b 0 45%, transparent 46%), #1d3d0d;
+  background: radial-gradient(circle at 50% 35%, var(--card-color, #9bf00b) 0 22%, transparent 23%),
+              radial-gradient(ellipse at 50% 100%, var(--card-color, #9bf00b) 0 45%, transparent 46%), #1d1d1d;
   box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.7);
 }
 .gamercard h2 { margin: 0 0 10px; font-size: 32px; }

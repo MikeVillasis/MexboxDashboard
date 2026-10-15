@@ -29,6 +29,8 @@ export const PALETTES = {
 
 const pick = (list, id) => list[id] ?? list[0];
 
+export const GESTURE_SECONDS = { wave: 1.8, laugh: 1.6, nod: 1.1 };
+
 export class AvatarBuilder {
   constructor() {
     this.kit = null;
@@ -79,6 +81,8 @@ export class Avatar {
     this.face = new FaceController(this.faceTextures, 0, 0);
     this.rig = kit.createRig(this.root);
     this.time = Math.random() * 10;
+    // Motion state written by the plaza AI each frame and read by the kit's procedural animation.
+    this.motion = { walk: 0, walkPhase: 0, gesture: null, gestureTime: 0, dangle: 0 };
   }
 
   get id() { return this.dna?.id; }
@@ -125,11 +129,25 @@ export class Avatar {
     }
   }
 
-  /// Procedural idle: breathing, arm sway, a little head motion. Phase 4 layers walking/emotes on top.
+  /// Plays a gesture ("wave" | "laugh" | "nod") once; the face reacts to match.
+  gesture(name) {
+    this.motion.gesture = name;
+    this.motion.gestureTime = 0;
+    if (name === "laugh") { this.face.express("happy", 1.6); this.face.talk(1.4); }
+    else if (name === "wave") this.face.express("happy", 1.4);
+    else if (name === "nod") this.face.talk(0.6);
+  }
+
+  /// Procedural animation: idle breathing always, then walk / gesture / dangle layers driven by this.motion.
   update(dt) {
     this.time += dt;
+    const m = this.motion;
+    if (m.gesture) {
+      m.gestureTime += dt;
+      if (m.gestureTime > GESTURE_SECONDS[m.gesture]) m.gesture = null;
+    }
     this.face.update(dt);
-    this.kit.animateIdle(this.rig, this.time);
+    this.kit.animate(this.rig, this.time, m);
   }
 
   dispose() {
@@ -219,19 +237,67 @@ class ProceduralKit {
     return null;
   }
 
-  animateIdle(rig, t) {
+  /// Layers, each written absolutely every frame: idle → walk (blended by m.walk) → gesture → dangle (blended).
+  animate(rig, t, m) {
     const b = rig.bones;
-    const breathe = Math.sin(t * 1.9);
-    b.chest.rotation.x = breathe * 0.025;
+    for (const bone of Object.values(b)) bone.rotation.set(0, 0, 0);
+
+    // Idle.
+    b.chest.rotation.x = Math.sin(t * 1.9) * 0.025;
     b.spine.rotation.z = Math.sin(t * 0.7) * 0.02;
-    b.head.rotation.y = Math.sin(t * 0.45) * 0.18;
+    b.head.rotation.y = Math.sin(t * 0.45) * 0.18 * (1 - m.walk);
     b.head.rotation.x = Math.sin(t * 0.9 + 1) * 0.04;
     b.upperArm_L.rotation.z = 0.06 + Math.sin(t * 1.3) * 0.04;
     b.upperArm_R.rotation.z = -0.06 - Math.sin(t * 1.3 + 0.5) * 0.04;
-    b.upperArm_L.rotation.x = Math.sin(t * 0.8) * 0.05;
-    b.upperArm_R.rotation.x = -Math.sin(t * 0.8) * 0.05;
-    b.foreArm_L.rotation.x = -0.12 + Math.sin(t * 1.1) * 0.03;
-    b.foreArm_R.rotation.x = -0.12 + Math.sin(t * 1.1 + 0.7) * 0.03;
+    b.foreArm_L.rotation.x = -0.12;
+    b.foreArm_R.rotation.x = -0.12;
+
+    // Walk: legs and opposite arms swing with the stride phase.
+    if (m.walk > 0.001) {
+      const p = m.walkPhase;
+      const w = m.walk;
+      b.thigh_L.rotation.x = Math.sin(p) * 0.55 * w;
+      b.thigh_R.rotation.x = -Math.sin(p) * 0.55 * w;
+      b.shin_L.rotation.x = Math.max(0, -Math.sin(p + 0.9)) * 0.7 * w;
+      b.shin_R.rotation.x = Math.max(0, Math.sin(p + 0.9)) * 0.7 * w;
+      b.upperArm_L.rotation.x = -Math.sin(p) * 0.45 * w;
+      b.upperArm_R.rotation.x = Math.sin(p) * 0.45 * w;
+      b.spine.rotation.y = Math.sin(p) * 0.08 * w;
+      b.hips.position.y = P.hips.y + Math.abs(Math.cos(p)) * 0.03 * w;
+    } else {
+      b.hips.position.y = P.hips.y;
+    }
+
+    // Gestures.
+    const g = m.gesture;
+    const k = g ? envelope(m.gestureTime, GESTURE_SECONDS[g]) : 0;
+    if (g === "wave") {
+      b.upperArm_R.rotation.z = lerp(b.upperArm_R.rotation.z, -2.7, k);
+      b.foreArm_R.rotation.x = lerp(-0.12, 0, k);
+      b.foreArm_R.rotation.z = Math.sin(t * 13) * 0.45 * k;
+      b.head.rotation.z = 0.08 * k;
+    } else if (g === "laugh") {
+      b.chest.rotation.x = lerp(b.chest.rotation.x, -0.18 + Math.sin(t * 22) * 0.05, k);
+      b.head.rotation.x = lerp(b.head.rotation.x, -0.25, k);
+      b.upperArm_L.rotation.z = lerp(b.upperArm_L.rotation.z, 0.35, k);
+      b.upperArm_R.rotation.z = lerp(b.upperArm_R.rotation.z, -0.35, k);
+      b.foreArm_L.rotation.x = lerp(-0.12, -1.2, k);
+      b.foreArm_R.rotation.x = lerp(-0.12, -1.2, k);
+    } else if (g === "nod") {
+      b.head.rotation.x = Math.sin(m.gestureTime * 9) * 0.28 * k;
+    }
+
+    // Dangle (held by the pointer): arms up, legs kicking, head lolling.
+    if (m.dangle > 0.001) {
+      const d = m.dangle;
+      b.upperArm_L.rotation.z = lerp(b.upperArm_L.rotation.z, 2.5, d);
+      b.upperArm_R.rotation.z = lerp(b.upperArm_R.rotation.z, -2.5, d);
+      b.thigh_L.rotation.x = Math.sin(t * 7) * 0.45 * d;
+      b.thigh_R.rotation.x = -Math.sin(t * 7) * 0.45 * d;
+      b.shin_L.rotation.x = (0.4 + Math.sin(t * 7 + 1) * 0.3) * d;
+      b.shin_R.rotation.x = (0.4 - Math.sin(t * 7 + 1) * 0.3) * d;
+      b.head.rotation.z = Math.sin(t * 2.5) * 0.25 * d;
+    }
   }
 }
 
@@ -283,6 +349,14 @@ function bindPart(geometry, material, skeleton) {
   const mesh = new THREE.SkinnedMesh(geometry, material);
   mesh.bind(skeleton, new THREE.Matrix4());
   return mesh;
+}
+
+function lerp(a, b, k) { return a + (b - a) * k; }
+
+/// 0 → 1 → 0 over a gesture's duration with ~0.25 s ease in and out.
+function envelope(time, total) {
+  const ramp = 0.25;
+  return Math.min(1, time / ramp, Math.max(0, (total - time) / ramp));
 }
 
 function group(...objects) { const g = new THREE.Group(); objects.forEach((o) => g.add(o)); return g; }
@@ -472,7 +546,8 @@ class GltfKit {
     return avatar.materials[name] ?? source;
   }
 
-  animateIdle(rig, t) {
+  /// Without clips in the art yet, GLTF avatars only get the idle layer; walk/gesture need authored animations.
+  animate(rig, t) {
     const head = rig.find(/head/i);
     const chest = rig.find(/spine2|chest|upperchest/i);
     if (head) head.rotation.y = Math.sin(t * 0.45) * 0.18;

@@ -11,7 +11,7 @@ using Dashboard.Core.Settings;
 namespace Dashboard.App.Web;
 
 /// <summary>Window-level operations the bridge can trigger, supplied by <see cref="WebShellWindow"/>.</summary>
-public sealed record WebShellActions(Action ToggleFullscreen, Action Exit);
+public sealed record WebShellActions(Action ToggleFullscreen, Action Exit, Action<JsonObject> OpenGamercard);
 
 /// <summary>
 /// Backend surface exposed to the page as <c>window.chrome.webview.hostObjects.xboxBackend</c>.
@@ -71,6 +71,41 @@ public sealed class XboxHostBridge
             });
         }
         return games.ToJsonString();
+    }
+
+    /// <summary>
+    /// A plaza avatar was clicked: C# validates its recipe, builds the gamercard summary (library stats for the local
+    /// player) and pushes OPEN_GAMERCARD to the page. False if the recipe is invalid.
+    /// </summary>
+    public bool InspectAvatar(string dnaJson)
+    {
+        var dna = AvatarDna.TryParse(dnaJson);
+        if (dna is null) return false;
+
+        var isLocal = dna.Id == "local";
+        var card = new JsonObject
+        {
+            ["gamertag"] = dna.Name,
+            ["color"] = dna.ShirtColor,
+            ["local"] = isLocal,
+        };
+        if (isLocal)
+        {
+            var games = _library.GetSnapshot();
+            card["stats"] = new JsonObject
+            {
+                ["games"] = games.Count,
+                ["launches"] = games.Sum(g => g.PlayCount),
+                ["last played"] = games.Where(g => g.LastPlayed is not null).MaxBy(g => g.LastPlayed)?.Title ?? "—",
+            };
+        }
+        else
+        {
+            card["stats"] = new JsonObject { ["status"] = "plaza resident", ["zone"] = "your plaza" };
+        }
+        Log.Info($"Web: inspect avatar {dna.Id} ({dna.Name})");
+        _shell.OpenGamercard(card);
+        return true;
     }
 
     /// <summary>Profile summary for the gamercard; the gamertag is the avatar recipe's name.</summary>

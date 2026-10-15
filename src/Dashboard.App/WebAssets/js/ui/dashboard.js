@@ -66,7 +66,10 @@ export class Dashboard extends EventTarget {
         if (this.bladeName() === "media") this.mediaCommand("MediaNext");
         else if (this.bladeName() === "games") this.toast("custom cover art is set from the native shell for now");
         break;
-      case "OPEN_GAMERCARD": $("gamercard").hidden ? this.openGamercard() : this.closeGamercard(); break;
+      case "OPEN_GAMERCARD":
+        if (payload?.card) this.openGamercard(payload.card);       // a plaza avatar, summarised by C#
+        else $("gamercard").hidden ? this.openGamercard() : this.closeGamercard();
+        break;
     }
   }
 
@@ -335,10 +338,19 @@ export class Dashboard extends EventTarget {
 
   // ───────────── Gamercard ─────────────
 
-  async openGamercard() {
-    const profile = JSON.parse(await this.backend.GetProfileJson());
-    $("gc-gamertag").textContent = profile.gamertag;
-    const stats = [["games", profile.games], ["launches", profile.launches], ["last played", profile.lastPlayed ?? "—"]];
+  /// Without a card: the local profile. With one: the summary C# built for a clicked plaza avatar.
+  async openGamercard(card = null) {
+    let stats;
+    if (card) {
+      $("gc-gamertag").textContent = card.gamertag;
+      stats = Object.entries(card.stats ?? {});
+      document.querySelector(".gamercard-picture").style.setProperty("--card-color", card.color);
+    } else {
+      const profile = JSON.parse(await this.backend.GetProfileJson());
+      $("gc-gamertag").textContent = profile.gamertag;
+      stats = [["games", profile.games], ["launches", profile.launches], ["last played", profile.lastPlayed ?? "—"]];
+      document.querySelector(".gamercard-picture").style.setProperty("--card-color", this.dna?.shirtColor ?? "#9bf00b");
+    }
     $("gc-stats").replaceChildren(...stats.flatMap(([k, v]) => {
       const dt = document.createElement("dt"); dt.textContent = k;
       const dd = document.createElement("dd"); dd.textContent = v;

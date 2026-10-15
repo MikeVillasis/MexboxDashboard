@@ -67,6 +67,7 @@ public partial class App : Application
             var web = new Web.WebShellWindow(library, _media, sounds, _settings)
             {
                 // --blade=avatar opens on a given blade (handy for testing and desktop shortcuts).
+                PlazaSelfTest = e.Args.Contains("--plaza-selftest", StringComparer.OrdinalIgnoreCase),
                 StartBlade = e.Args.FirstOrDefault(a => a.StartsWith("--blade=", StringComparison.OrdinalIgnoreCase))?[8..],
             };
             MainWindow = web;

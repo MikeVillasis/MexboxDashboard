@@ -40,7 +40,11 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
   swappable SkinnedMesh parts; procedural kit in use, GLTF kit (models/base_rig.glb + {slot}_{id}.glb) written but
   untested without art. `FaceController.js`: 4x4 UV atlases shifted by texture.offset. `scene/CameraDirector.js`: per-blade
   shots. Blades now: games, media, friends, avatar, system. `--blade=<name>` opens on a blade. JS errors → dashboard.log.
-  Next phases: plaza AI + grab/drop, P2P (zero-cost).
+  Phase 4 done: `js/avatar/AvatarAI.js` (IDLE/WANDER/SOCIALIZE/EMOTE/GRABBED FSM, boids separation, chat within 2 m,
+  pair cooldowns); procedural walk/wave/laugh/nod/dangle layers in `ProceduralKit.animate`; plaza pointer: click avatar →
+  bridge `InspectAvatar` → C# pushes OPEN_GAMERCARD; drag → grab/dangle, drop next to someone → instant chat.
+  `--plaza-selftest` scripts grab→drop→inspect and logs PLAZA_EVENTs (keeps simulating unfocused).
+  Next phase: P2P sync (zero-cost).
 - SteamGridDB: intentionally left as-is (opt-in by API key, no UI). The owner does not plan to use it.
 
 ## Cover conventions

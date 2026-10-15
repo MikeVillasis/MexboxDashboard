@@ -44,6 +44,9 @@ public sealed class WebShellWindow : Window
     /// <summary>Blade to open on (e.g. "avatar"); null = games.</summary>
     public string? StartBlade { get; init; }
 
+    /// <summary>--plaza-selftest: the page scripts a grab → drag → drop → inspect sequence and reports it to the log.</summary>
+    public bool PlazaSelfTest { get; init; }
+
     public WebShellWindow(GameLibraryService library, IMediaService media, SoundService sounds, SettingsStore settings)
     {
         _library = library;
@@ -132,7 +135,8 @@ public sealed class WebShellWindow : Window
             };
             core.NewWindowRequested += (_, e) => e.Handled = true;
 
-            var actions = new WebShellActions(ToggleFullscreen, Close);
+            var actions = new WebShellActions(ToggleFullscreen, Close,
+                card => _messages.Post("OPEN_GAMERCARD", new JsonObject { ["card"] = card, ["source"] = "plaza" }));
             await avatarLoad;
             core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions, _avatar));
             _messages.Attach(core);
@@ -150,6 +154,7 @@ public sealed class WebShellWindow : Window
                     ["media"] = MediaJson(_media.Current),
                     ["soundEnabled"] = _sounds.Enabled,
                     ["startBlade"] = StartBlade,
+                    ["plazaSelfTest"] = PlazaSelfTest,
                 });
             };
 
@@ -176,6 +181,8 @@ public sealed class WebShellWindow : Window
             Log.Info($"Web: PING received ({payload?["sent"]})");
             _messages.Post("PONG", new JsonObject { ["echo"] = payload?["sent"]?.DeepClone(), ["host"] = "csharp" });
         });
+
+        _messages.On("PLAZA_EVENT", payload => Log.Info($"Web: plaza {payload?["event"]} {payload?["id"]}{(payload?["with"] is { } w ? $" with {w}" : "")}"));
 
         _messages.On("JS_ERROR", payload => Log.Error($"Web: page error {payload?["message"]} at {payload?["where"]}"));
 
