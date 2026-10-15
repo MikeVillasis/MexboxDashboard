@@ -1,0 +1,128 @@
+<Window x:Class="Dashboard.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:Dashboard.App.Controls"
+        xmlns:views="clr-namespace:Dashboard.App.Views"
+        Title="Xbox 360 Dashboard"
+        Width="1600" Height="900"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
+        Background="#FF010A01"
+        Foreground="White"
+        FontFamily="{StaticResource DashFont}" FontWeight="SemiBold"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal"
+        KeyboardNavigation.DirectionalNavigation="None"
+        KeyboardNavigation.TabNavigation="None"
+        PreviewKeyDown="OnPreviewKeyDown">
+
+    <Grid>
+        <!-- ═══════ Backdrop: per-blade gradient + breathing aura + grain + scanlines ═══════ -->
+        <Grid IsHitTestVisible="False">
+            <Rectangle>
+                <Rectangle.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                        <GradientStop x:Name="BackdropTopStop" Color="#FF0E3A0E" Offset="0" />
+                        <GradientStop x:Name="BackdropBottomStop" Color="#FF010A01" Offset="1" />
+                    </LinearGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+
+            <Ellipse x:Name="Aura" Width="1700" Height="1100"
+                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-420,-360,0"
+                     RenderTransformOrigin="0.5,0.5">
+                <Ellipse.RenderTransform>
+                    <ScaleTransform x:Name="AuraScale" ScaleX="1" ScaleY="1" />
+                </Ellipse.RenderTransform>
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop x:Name="AuraInnerStop" Color="#7077BB00" Offset="0" />
+                        <GradientStop x:Name="AuraOuterStop" Color="#0077BB00" Offset="1" />
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <!-- Horizon light band behind the blades -->
+            <Rectangle Height="420" VerticalAlignment="Bottom" Opacity="0.35">
+                <Rectangle.Fill>
+                    <RadialGradientBrush Center="0.35,1" GradientOrigin="0.35,1" RadiusX="0.7" RadiusY="1">
+                        <GradientStop Color="#40FFFFFF" Offset="0" />
+                        <GradientStop Color="#00FFFFFF" Offset="1" />
+                    </RadialGradientBrush>
+                </Rectangle.Fill>
+            </Rectangle>
+
+            <Rectangle x:Name="NoiseLayer" Opacity="0.06" />
+            <Rectangle Fill="{StaticResource ScanlineBrush}" Opacity="0.10" />
+        </Grid>
+
+        <!-- ═══════ Dashboard ═══════ -->
+        <Grid Margin="56,26,0,22">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Blade names along the top, current one large -->
+            <Grid Margin="0,0,56,12">
+                <StackPanel x:Name="HeaderStrip" Orientation="Horizontal" VerticalAlignment="Bottom" />
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                    <TextBlock x:Name="UserText" FontSize="19" Opacity="0.8" Margin="0,0,26,3" VerticalAlignment="Bottom" />
+                    <TextBlock x:Name="ClockText" FontSize="28" VerticalAlignment="Bottom" />
+                </StackPanel>
+            </Grid>
+
+            <!-- The blades. Order here = order on screen. -->
+            <controls:BladeStackPanel x:Name="BladeStack" Grid.Row="1">
+                <controls:Blade Header="games"
+                                Accent="{StaticResource GamesPrimary}" Glow="{StaticResource GamesNeon}"
+                                BackdropTop="{StaticResource GamesForestTop}" BackdropBottom="{StaticResource GamesForestBottom}"
+                                AuraColor="{StaticResource GamesGlow}">
+                    <views:GamesBladeView x:Name="GamesView" />
+                </controls:Blade>
+
+                <controls:Blade Header="media"
+                                Accent="{StaticResource MediaPrimary}" Glow="{StaticResource MediaCyan}"
+                                BackdropTop="{StaticResource MediaDeepTop}" BackdropBottom="{StaticResource MediaDeepBottom}"
+                                AuraColor="{StaticResource MediaCyan}">
+                    <views:MediaBladeView x:Name="MediaView" />
+                </controls:Blade>
+
+                <controls:Blade Header="system"
+                                Accent="{StaticResource SystemSilver}" Glow="{StaticResource SystemAmber}"
+                                BackdropTop="{StaticResource SystemDeepTop}" BackdropBottom="{StaticResource SystemDeepBottom}"
+                                AuraColor="{StaticResource SystemAmber}"
+                                Foreground="{StaticResource SystemCarbonBrush}">
+                    <views:SystemBladeView x:Name="SystemView" />
+                </controls:Blade>
+            </controls:BladeStackPanel>
+
+            <!-- Controller hint bar -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="4,14,0,0">
+                <Border Style="{StaticResource FaceGlyph}" Background="{StaticResource GlyphA}">
+                    <TextBlock Text="A" Style="{StaticResource GlyphText}" />
+                </Border>
+                <TextBlock Text="select" Style="{StaticResource HintLabel}" />
+
+                <Border Style="{StaticResource FaceGlyph}" Background="{StaticResource GlyphB}">
+                    <TextBlock Text="B" Style="{StaticResource GlyphText}" />
+                </Border>
+                <TextBlock Text="back" Style="{StaticResource HintLabel}" />
+
+                <Border Style="{StaticResource FaceGlyph}" Background="{StaticResource GlyphY}">
+                    <TextBlock Text="Y" Style="{StaticResource GlyphText}" />
+                </Border>
+                <TextBlock x:Name="YHint" Text="cover art" Style="{StaticResource HintLabel}" />
+
+                <Border Style="{StaticResource ShoulderGlyph}">
+                    <TextBlock Text="LB" Style="{StaticResource GlyphText}" FontSize="12" />
+                </Border>
+                <Border Style="{StaticResource ShoulderGlyph}">
+                    <TextBlock Text="RB" Style="{StaticResource GlyphText}" FontSize="12" />
+                </Border>
+                <TextBlock Text="switch blades" Style="{StaticResource HintLabel}" />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,79 @@
+<UserControl x:Class="Dashboard.App.Views.SystemBladeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <StaticResource x:Key="ListHighlightBrush" ResourceKey="SystemHighlight" />
+        <StaticResource x:Key="PillBrush" ResourceKey="SystemPill" />
+        <RadialGradientBrush x:Key="PillGlowBrush">
+            <GradientStop Color="#99FFB900" Offset="0.55" />
+            <GradientStop Color="#00FFB900" Offset="1" />
+        </RadialGradientBrush>
+
+        <Style x:Key="StatLabel" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Opacity" Value="0.65" />
+            <Setter Property="Margin" Value="0,14,0,0" />
+        </Style>
+        <Style x:Key="StatValue" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" MinWidth="300" MaxWidth="520" />
+            <ColumnDefinition Width="1.2*" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.ColumnSpan="2" Margin="0,0,0,18">
+            <TextBlock Text="system settings" Style="{StaticResource BladeTitle}" />
+            <TextBlock Text="dashboard, library and storage" Style="{StaticResource BladeSubtitle}" />
+        </StackPanel>
+
+        <ListBox x:Name="MenuList" Grid.Row="1"
+                 Style="{StaticResource BladeListBox}"
+                 ItemContainerStyle="{StaticResource BladeListItem}"
+                 ItemsSource="{Binding Items}"
+                 SelectedItem="{Binding SelectedItem, Mode=TwoWay}"
+                 MouseLeftButtonUp="OnItemClicked">
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <StackPanel Margin="4,8">
+                        <TextBlock Text="{Binding Title}" FontSize="20" />
+                        <TextBlock Text="{Binding Description}" FontSize="13" Opacity="0.7" />
+                    </StackPanel>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
+
+        <!-- Carbon glass stats panel with an amber edge -->
+        <Border Grid.Row="1" Grid.Column="1" Margin="44,0,0,0" VerticalAlignment="Top" MaxWidth="520"
+                CornerRadius="14" Padding="26,12,26,24" BorderBrush="{StaticResource SystemAmberBrush}" BorderThickness="0,3,0,0"
+                TextElement.Foreground="#FFEFEFEF">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#F0343438" Offset="0" />
+                    <GradientStop Color="#F01A1A1C" Offset="1" />
+                </LinearGradientBrush>
+            </Border.Background>
+            <StackPanel>
+                <TextBlock Text="library" Style="{StaticResource StatLabel}" />
+                <TextBlock Text="{Binding LibraryText}" Style="{StaticResource StatValue}" />
+                <TextBlock Text="platforms" Style="{StaticResource StatLabel}" />
+                <TextBlock Text="{Binding PlatformText}" Style="{StaticResource StatValue}" />
+                <TextBlock Text="last scan" Style="{StaticResource StatLabel}" />
+                <TextBlock Text="{Binding LastScanText}" Style="{StaticResource StatValue}" />
+                <TextBlock Text="memory" Style="{StaticResource StatLabel}" />
+                <TextBlock Text="{Binding MemoryText}" Style="{StaticResource StatValue}" />
+                <TextBlock Text="data folder" Style="{StaticResource StatLabel}" />
+                <TextBlock Text="{Binding DataFolder}" FontSize="14" TextWrapping="Wrap" />
+                <TextBlock Text="{Binding VersionText}" FontSize="13" Opacity="0.5" Margin="0,18,0,0" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

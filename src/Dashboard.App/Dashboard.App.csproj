@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Dashboard.App</RootNamespace>
+    <AssemblyName>Xbox360Dashboard</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <!-- Startup / footprint tuning. Publish with: dotnet publish -c Release -r win-x64 -->
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <TieredPGO>true</TieredPGO>
+    <TieredCompilationQuickJitForLoops>true</TieredCompilationQuickJitForLoops>
+    <ServerGarbageCollector>false</ServerGarbageCollector>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Lets the GC compact and hand memory back to the OS more aggressively (helps the < 80 MB idle target). -->
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dashboard.Core\Dashboard.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Drop blade_swoosh.wav, channel_change.wav, navigate.wav, select.wav, back.wav here. Missing files are skipped silently. -->
+    <None Update="Assets\Sounds\**\*.wav" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

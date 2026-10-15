@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="clr-namespace:Dashboard.App.Controls">
+
+    <!--
+        A blade = BladeChrome (one OnRender pass: curved plastic body, gloss, tab label)
+                + the blade's content. The whole thing is bitmap-cached (see Blade.cs), so sliding
+                blades is just compositing cached textures: no re-layout, no re-tessellation per frame.
+    -->
+    <Style TargetType="controls:Blade">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Focusable" Value="False" />
+        <!-- Left = tab strip + breathing room; right = overlap hidden under the next blade's tab. -->
+        <Setter Property="Padding" Value="86,30,96,28" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:Blade">
+                    <Grid>
+                        <controls:BladeChrome Header="{TemplateBinding Header}"
+                                              Accent="{TemplateBinding Accent}"
+                                              Glow="{TemplateBinding Glow}"
+                                              LabelBrush="{TemplateBinding Foreground}"
+                                              TabWidth="{x:Static controls:BladeStackPanel.TabWidth}" />
+                        <ContentPresenter x:Name="PART_Content"
+                                          Margin="{TemplateBinding Padding}"
+                                          Opacity="0"
+                                          IsHitTestVisible="False" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- Content fade is driven from Blade.cs so the first frame is deterministic. -->
+                        <Trigger Property="IsActive" Value="True">
+                            <Setter TargetName="PART_Content" Property="IsHitTestVisible" Value="True" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+</ResourceDictionary>

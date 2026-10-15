@@ -1,0 +1,226 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:controls="clr-namespace:Dashboard.App.Controls"
+                    xmlns:conv="clr-namespace:Dashboard.App.Converters">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Palette.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+    <conv:BoolToVisibilityConverter x:Key="BoolToVis" />
+    <conv:BoolToVisibilityConverter x:Key="BoolToVisInverted" Invert="True" />
+    <conv:NullToVisibilityConverter x:Key="NullToCollapsed" />
+    <conv:NullToVisibilityConverter x:Key="NullToVisible" Invert="True" />
+
+    <!-- ═══════════════ Blade list (left column of every blade) ═══════════════ -->
+    <Style x:Key="BladeListBox" TargetType="ListBox">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=controls:Blade}}" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="ScrollViewer.VerticalScrollBarVisibility" Value="Hidden" />
+        <Setter Property="ScrollViewer.CanContentScroll" Value="True" />
+        <Setter Property="VirtualizingPanel.IsVirtualizing" Value="True" />
+        <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling" />
+        <Setter Property="VirtualizingPanel.CacheLengthUnit" Value="Item" />
+        <Setter Property="VirtualizingPanel.CacheLength" Value="6,6" />
+        <Setter Property="KeyboardNavigation.DirectionalNavigation" Value="None" />
+    </Style>
+
+    <!-- Glossy selection pill: highlight body + hard-edged top specular, instant like the original dash. -->
+    <Style x:Key="BladeListItem" TargetType="ListBoxItem">
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Grid Margin="0,2" Background="Transparent">
+                        <Border x:Name="Body" CornerRadius="9" Opacity="0"
+                                Background="{DynamicResource ListHighlightBrush}"
+                                BorderBrush="#99FFFFFF" BorderThickness="1" />
+                        <Border x:Name="Gloss" CornerRadius="9" Opacity="0" Margin="1"
+                                Background="{StaticResource SpecularGloss}" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Body" Property="Opacity" Value="0.3" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Body" Property="Opacity" Value="1" />
+                            <Setter TargetName="Gloss" Property="Opacity" Value="1" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══════════════ Glossy pill button ═══════════════ -->
+    <Style x:Key="PillButton" TargetType="Button">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="Background" Value="{DynamicResource PillBrush}" />
+        <Setter Property="FontSize" Value="19" />
+        <Setter Property="Padding" Value="34,10" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="Halo" CornerRadius="999" Margin="-6" Opacity="0"
+                                Background="{DynamicResource PillGlowBrush}" />
+                        <Border x:Name="Body" CornerRadius="999" Background="{TemplateBinding Background}"
+                                BorderBrush="#B3FFFFFF" BorderThickness="1" />
+                        <Border CornerRadius="999" Margin="2" Background="{StaticResource SpecularGloss}" IsHitTestVisible="False" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Halo" Property="Opacity" Value="1" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Body" Property="Opacity" Value="0.8" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.4" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- Round transport button (media blade). Content is an icon glyph. -->
+    <Style x:Key="RoundGlossButton" TargetType="Button" BasedOn="{StaticResource PillButton}">
+        <Setter Property="Width" Value="68" />
+        <Setter Property="Height" Value="68" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontFamily" Value="{StaticResource IconFont}" />
+        <Setter Property="FontSize" Value="24" />
+    </Style>
+
+    <!-- ═══════════════ Jewel-case cover art ═══════════════ -->
+    <Style TargetType="controls:CoverArt">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="controls:CoverArt">
+                    <Grid>
+                        <!-- Case shell -->
+                        <Border x:Name="Shell" CornerRadius="6" Background="#FF101010" BorderBrush="#66FFFFFF" BorderThickness="1">
+                            <Grid x:Name="Inner" Margin="4">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <Border x:Name="Band" Grid.Row="0" Height="26" CornerRadius="3,3,0,0" ClipToBounds="True"
+                                        Background="{StaticResource CaseBandBrush}">
+                                    <TextBlock Text="{TemplateBinding Platform}" Foreground="White" FontSize="12" FontWeight="Bold"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center"
+                                               Typography.Capitals="AllSmallCaps" />
+                                </Border>
+
+                                <Grid Grid.Row="1" ClipToBounds="True">
+                                    <!-- Placeholder when no art is available -->
+                                    <Grid x:Name="Placeholder">
+                                        <Grid.Background>
+                                            <RadialGradientBrush Center="0.5,0.3" GradientOrigin="0.5,0.25" RadiusX="0.9" RadiusY="0.8">
+                                                <GradientStop Color="#FF2D6E1D" Offset="0" />
+                                                <GradientStop Color="#FF0C2A0C" Offset="0.7" />
+                                                <GradientStop Color="#FF050F05" Offset="1" />
+                                            </RadialGradientBrush>
+                                        </Grid.Background>
+                                        <TextBlock x:Name="FullTitle" Text="{TemplateBinding Title}" Foreground="White"
+                                                   FontSize="24" TextWrapping="Wrap" TextAlignment="Center"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" Margin="16" />
+                                        <TextBlock x:Name="InitialsText" Text="{TemplateBinding Initials}" Foreground="White"
+                                                   FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Visibility="Collapsed" />
+                                    </Grid>
+                                    <Image x:Name="Art" Source="{TemplateBinding Image}" Stretch="UniformToFill"
+                                           RenderOptions.BitmapScalingMode="HighQuality" />
+                                </Grid>
+                            </Grid>
+                        </Border>
+
+                        <!-- Plastic sheen across the case -->
+                        <Border CornerRadius="6" IsHitTestVisible="False">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                    <GradientStop Color="#40FFFFFF" Offset="0" />
+                                    <GradientStop Color="#14FFFFFF" Offset="0.38" />
+                                    <GradientStop Color="#00FFFFFF" Offset="0.39" />
+                                    <GradientStop Color="#00FFFFFF" Offset="1" />
+                                </LinearGradientBrush>
+                            </Border.Background>
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="HasImage" Value="True">
+                            <Setter TargetName="Placeholder" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="HasImage" Value="False">
+                            <Setter TargetName="Art" Property="Visibility" Value="Collapsed" />
+                        </Trigger>
+                        <Trigger Property="Compact" Value="True">
+                            <Setter TargetName="Band" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="Inner" Property="Margin" Value="1" />
+                            <Setter TargetName="Shell" Property="CornerRadius" Value="3" />
+                            <Setter TargetName="FullTitle" Property="Visibility" Value="Collapsed" />
+                            <Setter TargetName="InitialsText" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══════════════ Controller glyphs for the hint bar ═══════════════ -->
+    <Style x:Key="FaceGlyph" TargetType="Border">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="BorderBrush" Value="#99FFFFFF" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="ShoulderGlyph" TargetType="Border" BasedOn="{StaticResource FaceGlyph}">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="CornerRadius" Value="8,8,4,4" />
+        <Setter Property="Background" Value="{StaticResource GlyphShoulder}" />
+    </Style>
+    <Style x:Key="GlyphText" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="White" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style x:Key="HintLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Opacity" Value="0.85" />
+        <Setter Property="Margin" Value="0,0,28,0" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- Section headings inside blades -->
+    <Style x:Key="BladeTitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="36" />
+        <Setter Property="Margin" Value="4,0,0,0" />
+    </Style>
+    <Style x:Key="BladeSubtitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="16" />
+        <Setter Property="Opacity" Value="0.75" />
+        <Setter Property="Margin" Value="5,0,0,0" />
+    </Style>
+</ResourceDictionary>

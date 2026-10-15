@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Dashboard.Core: UI-free engine. Models, scanner plugins, SQLite cache, launch + cover services.
+    Nothing in here may reference WPF so it stays testable and can be reused by a future WinUI front end.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Dashboard.Core</RootNamespace>
+    <AssemblyName>Dashboard.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+</Project>
