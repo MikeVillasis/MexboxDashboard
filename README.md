@@ -3,15 +3,15 @@
 A native Windows games launcher and media controller styled after the 2005 Xbox 360 "Blades" dashboard.
 C# / .NET 8 / WPF, no Electron or CEF.
 
-## Status: Phase 3 (all storefronts + cover pipeline)
+## Status: Phase 4 (all storefronts, cover pipeline, system media)
 
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Solution layout, core models, `IGameScanner`, SQLite cache, library service, Blades UI shell, input, sound hooks | **done** |
 | 2 | (folded into 1) data model and schema | **done** |
 | 3 | Xbox / Epic / Battle.net / Riot scanners, cover pipeline (400x600 transcode, platform caches, SteamGridDB, icon fallback) | **done** |
-| 4 | WinRT SMTC media service (`GlobalSystemMediaTransportControlsSessionManager`) | next |
-| 5 | Visual polish pass: blade audio, focus animations, settings persistence | planned |
+| 4 | WinRT SMTC media service (`GlobalSystemMediaTransportControlsSessionManager`) | **done** |
+| 5 | Visual polish pass: blade audio, focus animations, settings persistence | next |
 
 Supported storefronts:
 
@@ -66,6 +66,7 @@ src/
 │  ├─ Data/SqliteGameLibraryCache     WAL-mode SQLite, single-transaction delta upserts, source-generated JSON metadata
 │  ├─ Services/GameLibraryService     cache-first boot → parallel scans → diff → persist → publish delta → cover pass
 │  ├─ Services/CoverArtPipeline       source priority, 400x600 cache, custom imports, pruning
+│  ├─ Services/SmtcMediaService       system "now playing" over WinRT GSMTC, event driven, artwork reused per track
 │  ├─ Imaging/                        CoverTranscoder (WinRT Windows.Graphics.Imaging), SteamGridDbClient
 │  ├─ Scanners/Steam/                 SteamScanner + forgiving VDF/ACF parser
 │  ├─ Scanners/Xbox/                  XboxScanner (PackageManager, .GamingRoot, Appx / MicrosoftGame.config logos)
@@ -118,6 +119,12 @@ logos and icons are centred on a gradient tinted by the manifest's background co
 Custom covers go through the same transcoder (`{game}~c{ticks}.jpg`) and the pass never replaces them. Cover writes are
 serialised so a generated cover cannot overwrite a custom one picked mid-pass. Generated covers of uninstalled games are pruned.
 
+**Media.** `SmtcMediaService` follows the same session as the Windows volume flyout (Spotify, browsers, VLC…) through WinRT
+`GlobalSystemMediaTransportControlsSessionManager`. It never polls: `CurrentSessionChanged` / `SessionsChanged` choose the
+session (falling back to any playing session when Windows reports none), `MediaPropertiesChanged` re-reads metadata and
+artwork, and `PlaybackInfoChanged` re-reads state and enabled controls. Artwork bytes are reused while the track is unchanged,
+so play/pause never re-decodes the image. Packaged players get their display name from `AppInfo`; Win32 ones from their exe name.
+
 **Threading.** The UI thread only renders and handles input. SQLite, registry, manifest parsing, image decoding, logging and ShellExecute all run on the thread pool; results come back through `Dispatcher.InvokeAsync`. XInput polls on its own thread and drops to 10 Hz while the window is inactive.
 
 **60 FPS blades.** Each blade is arranged once at a fixed size and cached as a GPU texture (`BitmapCache`, at the monitor's DPI). Switching blades animates only `TranslateTransform.X`, so frames are pure compositing with no layout or re-tessellation. The blade body is a single retained `OnRender` drawing, and the drop shadow is faked with offset geometry instead of a pixel shader. The breathing aura is the only perpetual animation, and it pauses when the window loses focus or minimises so WPF's render loop can idle while a game runs.
@@ -131,7 +138,6 @@ serialised so a generated cover cannot overwrite a custom one picked mid-pass. G
 - WebP decoding (Battle.net box art, `.webp` custom covers) relies on the Windows WebP codec, which ships with Windows 11 and most Windows 10 installs. Without it those games fall back to their executable icon.
 - Xbox titles with no `MicrosoftGame.config` that also sit outside every `.GamingRoot` folder (older UWP games) are not detected.
 - Generated covers carry no title text. The list row and preview already show the title.
-- The Media blade shows its "nothing playing" state until Phase 4 swaps `NullMediaService` for the SMTC service.
 - Settings (sound on/off, windowed mode) are not persisted yet.
 - Sound files are not included. See `src/Dashboard.App/Assets/Sounds/README.md`.
 - The "Convection" typeface is not bundled. The UI uses Segoe UI Semibold; change `DashFont` in `Themes/Palette.xaml`.

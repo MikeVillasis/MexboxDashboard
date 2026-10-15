@@ -17,9 +17,10 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
   Cover pipeline: `Services/CoverArtPipeline` + `Imaging/CoverTranscoder` (WinRT imaging, 400x600 JPEG) +
   `Imaging/SteamGridDbClient` (opt-in via `STEAMGRIDDB_API_KEY` or `%AppData%\Xbox360Launcher\steamgriddb.key`).
   `GameLibraryService` runs a background cover pass after each scan.
-- **Phase 4 next:** `SmtcMediaService : IMediaService` over WinRT `GlobalSystemMediaTransportControlsSessionManager`
-  (events only, no polling; thumbnail via `TryGetMediaPropertiesAsync().Thumbnail.OpenReadAsync()`), replacing `NullMediaService`.
-- **Phase 5:** polish: settings persistence (sound, windowed mode, SteamGridDB key UI), focus animations, sound assets.
+- **Phase 4 done.** `Services/SmtcMediaService` over WinRT `GlobalSystemMediaTransportControlsSessionManager`
+  (events only, no polling), registered in `App.xaml.cs`; `NullMediaService` removed. Keep the thumbnail `byte[]` reference
+  stable for an unchanged track: `MediaViewModel` re-decodes only when the reference changes.
+- **Phase 5 next:** polish: settings persistence (sound, windowed mode, SteamGridDB key UI), focus animations, sound assets.
 
 ## Cover conventions
 - Scanners never set `CoverArtPath`. They put art hints in `Metadata` using `GameMetadataKeys`

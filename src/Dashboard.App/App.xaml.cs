@@ -48,7 +48,7 @@ public partial class App : Application
 
         var covers = new CoverArtPipeline(AppPaths.CoversDir, CoverArtPipeline.LoadSteamGridDbApiKey(AppPaths.SteamGridDbKeyPath));
         var library = new GameLibraryService(scanners, new SqliteGameLibraryCache(AppPaths.DatabasePath), covers);
-        _media = new NullMediaService(); // Phase 4: SmtcMediaService
+        _media = new SmtcMediaService();
 
         var sounds = new SoundService(Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds"));
         sounds.PreloadInBackground();
