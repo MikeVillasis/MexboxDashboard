@@ -5,24 +5,118 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>xbox 360 dashboard</title>
   <link rel="stylesheet" href="css/shell.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three/three.module.min.js" } }
+  </script>
 </head>
 <body>
-  <main id="bridge-test">
-    <h1>web shell</h1>
-    <p class="subtitle">phase 1 · webview2 host bridge</p>
+  <!-- Layer 1: the 3D plaza. Receives every click that lands on empty dashboard space. -->
+  <canvas id="viewport-3d"></canvas>
 
-    <ul class="checks">
-      <li id="check-host"><span class="dot"></span>host object <code>xboxBackend.Ping</code><em>waiting…</em></li>
-      <li id="check-message"><span class="dot"></span>message channel <code>PING → PONG</code><em>waiting…</em></li>
-      <li id="check-ready"><span class="dot"></span>host ready event<em>waiting…</em></li>
-      <li id="check-library"><span class="dot"></span>library<em>waiting…</em></li>
-    </ul>
+  <!-- Layer 10: the dashboard. pointer-events: none here; only real controls opt back in. -->
+  <div id="dashboard-ui">
+    <header class="topbar">
+      <nav id="blade-names" class="blade-names"></nav>
+      <div class="topbar-right">
+        <button id="gamertag" class="gamertag interactive" title="gamercard (G)"></button>
+        <span id="clock" class="clock"></span>
+      </div>
+    </header>
 
-    <h2>input from c#</h2>
-    <ol id="nav-log" class="log"><li class="muted">press arrows / enter / esc, or use a controller</li></ol>
-  </main>
+    <div id="blade-stack" class="blade-stack">
+      <!-- Games -->
+      <section class="blade" data-blade="games" data-label="games">
+        <div class="blade-tab interactive"><span>games</span></div>
+        <div class="blade-body">
+          <div class="blade-header">
+            <h1>games library</h1>
+            <p id="games-summary" class="subtitle"></p>
+          </div>
+          <div class="games-layout">
+            <ul id="game-list" class="item-list interactive"></ul>
+            <div id="game-preview" class="game-preview">
+              <div class="cover-wrap">
+                <div id="preview-cover" class="cover interactive"></div>
+                <div id="preview-reflection" class="cover reflection"></div>
+              </div>
+              <div class="preview-info">
+                <h2 id="preview-title"></h2>
+                <p id="preview-details" class="subtitle"></p>
+                <button id="play-button" class="pill play interactive">play</button>
+              </div>
+            </div>
+            <div id="games-empty" class="empty-state" hidden>
+              <h2>no games yet</h2>
+              <p class="subtitle">checking your launchers…</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Media -->
+      <section class="blade" data-blade="media" data-label="media">
+        <div class="blade-tab interactive"><span>media</span></div>
+        <div class="blade-body">
+          <div class="blade-header">
+            <h1>now playing</h1>
+            <p id="media-app" class="subtitle"></p>
+          </div>
+          <div id="media-session" class="media-session" hidden>
+            <div id="media-art" class="media-art"></div>
+            <div class="media-info">
+              <h2 id="media-title"></h2>
+              <p id="media-artist"></p>
+              <p id="media-album" class="subtitle"></p>
+              <div class="transport">
+                <button id="media-prev" class="round interactive" title="previous (X)">&#x23EE;</button>
+                <button id="media-toggle" class="round big interactive" title="play / pause (A)"></button>
+                <button id="media-next" class="round interactive" title="next (Y)">&#x23ED;</button>
+              </div>
+            </div>
+          </div>
+          <div id="media-empty" class="empty-state">
+            <h2>nothing playing</h2>
+            <p class="subtitle">start music or a video in any app (spotify, a browser, vlc…) and it shows up here.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- System -->
+      <section class="blade" data-blade="system" data-label="system">
+        <div class="blade-tab interactive"><span>system</span></div>
+        <div class="blade-body">
+          <div class="blade-header">
+            <h1>system settings</h1>
+            <p id="system-version" class="subtitle"></p>
+          </div>
+          <ul id="system-list" class="item-list narrow interactive"></ul>
+        </div>
+      </section>
+    </div>
+
+    <footer class="hints">
+      <span><i class="btn a">A</i>select</span>
+      <span><i class="btn b">B</i>back</span>
+      <span id="hint-x" hidden><i class="btn x">X</i><em></em></span>
+      <span id="hint-y" hidden><i class="btn y">Y</i><em></em></span>
+      <span><i class="btn sh">LB</i><i class="btn sh">RB</i>switch blades</span>
+    </footer>
+
+    <!-- Gamercard overlay -->
+    <div id="gamercard" class="gamercard" hidden>
+      <div class="gamercard-card interactive">
+        <div class="gamercard-picture"></div>
+        <div>
+          <h2 id="gc-gamertag"></h2>
+          <dl id="gc-stats"></dl>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" hidden></div>
+  </div>
 
   <script src="js/bridge.js"></script>
-  <script src="js/main.js"></script>
+  <script type="module" src="js/main.js"></script>
 </body>
 </html>

@@ -7,6 +7,7 @@ using Dashboard.App.Audio;
 using Dashboard.App.Input;
 using Dashboard.Core.Abstractions;
 using Dashboard.Core.Infrastructure;
+using Dashboard.Core.Models;
 using Dashboard.Core.Services;
 using Dashboard.Core.Settings;
 using Microsoft.Web.WebView2.Core;
@@ -28,17 +29,22 @@ public sealed class WebShellWindow : Window
     private readonly GameLibraryService _library;
     private readonly SoundService _sounds;
     private readonly SettingsStore _settings;
+    private readonly IMediaService _media;
     private readonly WebView2 _webView = new();
     private readonly WebMessageDispatcher _messages;
     private readonly XInputService _gamepad;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly Stopwatch _startup = Stopwatch.StartNew();
+    private bool _isFullscreen = true;
+    private byte[]? _lastArtBytes;
+    private string? _lastArtUri;
 
     public WebShellWindow(GameLibraryService library, IMediaService media, SoundService sounds, SettingsStore settings)
     {
         _library = library;
         _sounds = sounds;
         _settings = settings;
+        _media = media;
         _sounds.Enabled = settings.Current.SoundEnabled;
         _messages = new WebMessageDispatcher(Dispatcher);
 
@@ -53,18 +59,21 @@ public sealed class WebShellWindow : Window
         Content = _webView;
 
         _gamepad = new XInputService(Dispatcher);
-        _gamepad.ActionTriggered += action => PostNav(action, "gamepad");
-        Activated += (_, _) => _gamepad.IsSuspended = false;
-        Deactivated += (_, _) => _gamepad.IsSuspended = true;
+        _gamepad.ActionTriggered += action => PostCommand(action, "gamepad");
+        // A game in front: stop polling the pad and let the page pause its WebGL loop.
+        Activated += (_, _) =>
+        {
+            _gamepad.IsSuspended = false;
+            _messages.Post("SHELL_ACTIVE", new JsonObject { ["active"] = true });
+        };
+        Deactivated += (_, _) =>
+        {
+            _gamepad.IsSuspended = true;
+            _messages.Post("SHELL_ACTIVE", new JsonObject { ["active"] = false });
+        };
 
         _library.LibraryChanged += (_, _) => _messages.Post("LIBRARY_CHANGED", new JsonObject { ["count"] = _library.GetSnapshot().Count });
-        media.SessionUpdated += (_, info) => _messages.Post("MEDIA_UPDATED", info is null ? null : new JsonObject
-        {
-            ["title"] = info.Title,
-            ["artist"] = info.Artist,
-            ["app"] = info.SourceAppName,
-            ["state"] = info.State.ToString(),
-        });
+        media.SessionUpdated += (_, info) => _messages.Post("MEDIA_UPDATED", MediaJson(info));
 
         Loaded += async (_, _) => await InitializeAsync();
         Closed += (_, _) =>
@@ -104,6 +113,8 @@ public sealed class WebShellWindow : Window
 
             var assets = Path.Combine(AppContext.BaseDirectory, "WebAssets");
             core.SetVirtualHostNameToFolderMapping(HostName, assets, CoreWebView2HostResourceAccessKind.Allow);
+            // Covers live in %AppData%; a second host keeps them reachable without file:// URLs. Read-only content.
+            core.SetVirtualHostNameToFolderMapping(XboxHostBridge.CoversHostName, AppPaths.CoversDir, CoreWebView2HostResourceAccessKind.Allow);
 
             // Stay on our origin: external links open in the user's browser instead of replacing the shell.
             core.NavigationStarting += (_, e) =>
@@ -114,7 +125,8 @@ public sealed class WebShellWindow : Window
             };
             core.NewWindowRequested += (_, e) => e.Handled = true;
 
-            core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings));
+            var actions = new WebShellActions(ToggleFullscreen, Close);
+            core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions));
             _messages.Attach(core);
             RegisterHandlers();
 
@@ -127,6 +139,8 @@ public sealed class WebShellWindow : Window
                 {
                     ["version"] = typeof(WebShellWindow).Assembly.GetName().Version?.ToString(3),
                     ["games"] = _library.GetSnapshot().Count,
+                    ["media"] = MediaJson(_media.Current),
+                    ["soundEnabled"] = _sounds.Enabled,
                 });
             };
 
@@ -161,13 +175,81 @@ public sealed class WebShellWindow : Window
         {
             var key = payload?["key"]?.GetValue<string>();
             var shift = payload?["shift"]?.GetValue<bool>() ?? false;
-            if (key == "F11") return; // fullscreen toggle arrives with the Phase 2 shell
-            if (MapKey(key, shift) is { } action) PostNav(action, "keyboard");
+            if (key == "F11") { ToggleFullscreen(); return; }
+            if (key is "g" or "G") { _messages.Post("OPEN_GAMERCARD", new JsonObject { ["source"] = "keyboard" }); return; }
+            if (MapKey(key, shift) is { } action) PostCommand(action, "keyboard");
         });
     }
 
-    private void PostNav(NavAction action, string source) =>
-        _messages.Post("NAV", new JsonObject { ["action"] = action.ToString(), ["source"] = source });
+    /// <summary>
+    /// Translates device-neutral input into the page's command vocabulary. The page owns view state, so it decides what
+    /// a d-pad move means on the current blade (e.g. an unhandled left/right switches blades, as in the native shell).
+    /// </summary>
+    private void PostCommand(NavAction action, string source)
+    {
+        var (type, payload) = action switch
+        {
+            NavAction.Up => ("NAVIGATE_DPAD", new JsonObject { ["direction"] = "up" }),
+            NavAction.Down => ("NAVIGATE_DPAD", new JsonObject { ["direction"] = "down" }),
+            NavAction.Left => ("NAVIGATE_DPAD", new JsonObject { ["direction"] = "left" }),
+            NavAction.Right => ("NAVIGATE_DPAD", new JsonObject { ["direction"] = "right" }),
+            NavAction.PageUp => ("NAVIGATE_DPAD", new JsonObject { ["direction"] = "pageup" }),
+            NavAction.PageDown => ("NAVIGATE_DPAD", new JsonObject { ["direction"] = "pagedown" }),
+            NavAction.BladePrevious => ("SWITCH_BLADE", new JsonObject { ["delta"] = -1 }),
+            NavAction.BladeNext => ("SWITCH_BLADE", new JsonObject { ["delta"] = 1 }),
+            NavAction.Accept => ("SELECT_ITEM", new JsonObject()),
+            NavAction.Back => ("BACK", new JsonObject()),
+            NavAction.ActionX => ("ACTION_X", new JsonObject()),
+            NavAction.ActionY => ("ACTION_Y", new JsonObject()),
+            _ => (null, null),
+        };
+        if (type is null) return;
+        payload!["source"] = source;
+        _messages.Post(type, payload);
+    }
+
+    private void ToggleFullscreen()
+    {
+        _isFullscreen = !_isFullscreen;
+        WindowState = WindowState.Normal; // leave Maximized before changing style or the taskbar stays visible
+        if (_isFullscreen)
+        {
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            ResizeMode = ResizeMode.CanResize;
+            Width = 1600;
+            Height = 900;
+            Left = SystemParameters.WorkArea.Left + (SystemParameters.WorkArea.Width - Width) / 2;
+            Top = SystemParameters.WorkArea.Top + (SystemParameters.WorkArea.Height - Height) / 2;
+        }
+    }
+
+    /// <summary>Album art travels as a data URI, re-encoded only when the track's artwork array changes.</summary>
+    private JsonObject? MediaJson(MediaSessionInfo? info)
+    {
+        if (info is null) return null;
+        if (!ReferenceEquals(info.ThumbnailBytes, _lastArtBytes))
+        {
+            _lastArtBytes = info.ThumbnailBytes;
+            _lastArtUri = info.ThumbnailBytes is { Length: > 0 } bytes ? "data:image/jpeg;base64," + Convert.ToBase64String(bytes) : null;
+        }
+        return new JsonObject
+        {
+            ["title"] = info.Title,
+            ["artist"] = info.Artist,
+            ["album"] = info.AlbumTitle,
+            ["app"] = info.SourceAppName.ToLowerInvariant(),
+            ["playing"] = info.State == MediaPlaybackState.Playing,
+            ["canNext"] = info.CanGoNext,
+            ["canPrevious"] = info.CanGoPrevious,
+            ["art"] = _lastArtUri,
+        };
+    }
 
     private async Task LoadLibraryAsync()
     {

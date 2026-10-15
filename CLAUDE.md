@@ -31,7 +31,11 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
   services, JSON strings out). `Web/WebMessageDispatcher` = `{type,payload}` envelopes both ways. Keyboard: the page
   forwards `KEY`, C# maps to `NAV` (same as XInput). Events posted before page load are lost; put state in `HOST_READY`.
   The `--web` shell relaxes the RAM/startup targets: about 150 MB host plus 340 MB in WebView2 processes, page ready about 2.7 s.
-  Next phases: 2D blades UI over a Three.js canvas, avatar DNA, plaza AI, P2P (zero-cost).
+  Phase 2 done: `WebAssets/js/ui/dashboard.js` (blades, view state only) over `js/scene/plaza.js` (Three.js r169
+  vendored in `vendor/three`, import map, placeholder scene). `#dashboard-ui` is pointer-events:none; only `.interactive`
+  elements take clicks, so empty glass falls through to the canvas. C# sends SWITCH_BLADE / NAVIGATE_DPAD / SELECT_ITEM /
+  BACK / ACTION_X / ACTION_Y / OPEN_GAMERCARD; covers via `https://covers.xbox.local/`; SHELL_ACTIVE pauses WebGL.
+  Next phases: avatar DNA + camera director, plaza AI, P2P (zero-cost).
 - SteamGridDB: intentionally left as-is (opt-in by API key, no UI). The owner does not plan to use it.
 
 ## Cover conventions
