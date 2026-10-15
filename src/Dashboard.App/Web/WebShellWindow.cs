@@ -31,7 +31,8 @@ public sealed class WebShellWindow : Window
     private readonly SoundService _sounds;
     private readonly SettingsStore _settings;
     private readonly IMediaService _media;
-    private readonly AvatarProfileStore _avatar = new(AppPaths.LocalProfilePath, Environment.UserName.ToLowerInvariant());
+    private AvatarProfileStore _avatar = null!;
+    private FriendStore _friends = null!;
     private readonly WebView2 _webView = new();
     private readonly WebMessageDispatcher _messages;
     private readonly XInputService _gamepad;
@@ -46,6 +47,12 @@ public sealed class WebShellWindow : Window
 
     /// <summary>--plaza-selftest: the page scripts a grab → drag → drop → inspect sequence and reports it to the log.</summary>
     public bool PlazaSelfTest { get; init; }
+
+    /// <summary>--profile=name: separate avatar + friends files, so two instances can test P2P on one machine.</summary>
+    public string? Profile { get; init; }
+
+    /// <summary>--connect=CODE: connect to a friend as soon as the page is up.</summary>
+    public string? ConnectTo { get; init; }
 
     public WebShellWindow(GameLibraryService library, IMediaService media, SoundService sounds, SettingsStore settings)
     {
@@ -87,7 +94,8 @@ public sealed class WebShellWindow : Window
         Closed += (_, _) =>
         {
             _shutdown.Cancel();
-            _avatar.Flush(TimeSpan.FromMilliseconds(500));
+            _avatar?.Flush(TimeSpan.FromMilliseconds(500));
+            _friends?.Flush(TimeSpan.FromMilliseconds(500));
             _gamepad.Dispose();
             _webView.Dispose();
         };
@@ -97,7 +105,11 @@ public sealed class WebShellWindow : Window
     {
         try
         {
-            var avatarLoad = _avatar.LoadAsync(); // off-thread, alongside WebView2 start-up
+            var defaultName = string.IsNullOrEmpty(Profile) ? Environment.UserName.ToLowerInvariant() : Profile;
+            _avatar = new AvatarProfileStore(AppPaths.ForProfile(AppPaths.LocalProfilePath, Profile), defaultName);
+            _friends = new FriendStore(AppPaths.ForProfile(AppPaths.FriendsPath, Profile));
+            if (!string.IsNullOrEmpty(Profile)) Title += $" ({Profile})";
+            var avatarLoad = Task.WhenAll(_avatar.LoadAsync(), _friends.LoadAsync()); // off-thread, alongside WebView2 start-up
             var environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null,
                 userDataFolder: Path.Combine(AppPaths.DataRoot, "WebView2"));
@@ -138,7 +150,7 @@ public sealed class WebShellWindow : Window
             var actions = new WebShellActions(ToggleFullscreen, Close,
                 card => _messages.Post("OPEN_GAMERCARD", new JsonObject { ["card"] = card, ["source"] = "plaza" }));
             await avatarLoad;
-            core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions, _avatar));
+            core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions, _avatar, _friends));
             _messages.Attach(core);
             RegisterHandlers();
 
@@ -155,6 +167,7 @@ public sealed class WebShellWindow : Window
                     ["soundEnabled"] = _sounds.Enabled,
                     ["startBlade"] = StartBlade,
                     ["plazaSelfTest"] = PlazaSelfTest,
+                    ["connectTo"] = ConnectTo,
                 });
             };
 
@@ -183,6 +196,8 @@ public sealed class WebShellWindow : Window
         });
 
         _messages.On("PLAZA_EVENT", payload => Log.Info($"Web: plaza {payload?["event"]} {payload?["id"]}{(payload?["with"] is { } w ? $" with {w}" : "")}"));
+
+        _messages.On("NET_EVENT", payload => Log.Info($"Web: net {payload?["event"]} {payload?["peer"]} {payload?["detail"]}"));
 
         _messages.On("JS_ERROR", payload => Log.Error($"Web: page error {payload?["message"]} at {payload?["where"]}"));
 

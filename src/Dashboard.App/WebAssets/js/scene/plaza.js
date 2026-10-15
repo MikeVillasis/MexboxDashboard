@@ -90,6 +90,25 @@ export class Plaza {
     return this.local;
   }
 
+  /// A friend's avatar: spawned once, re-dressed on DNA updates. Offline friends roam as NPCs; live ones follow their peer.
+  async upsertFriend(dna, { live = false, x, z } = {}) {
+    let avatar = this.avatars.get(dna.id);
+    if (avatar) {
+      await avatar.applyDna(dna);
+    } else {
+      const builder = await this.builder;
+      avatar = await builder.build(dna);
+      const angle = Math.random() * Math.PI * 2;
+      avatar.root.position.set(x ?? Math.cos(angle) * 5, 0, z ?? Math.sin(angle) * 5);
+      this.scene.add(avatar.root);
+      this.avatars.set(dna.id, avatar);
+      this.ai.add(avatar);
+    }
+    this.ai.setRemote(avatar, live);
+    if (live && x !== undefined) this.ai.walkTo(avatar, x, z);
+    return avatar;
+  }
+
   async spawnResidents() {
     const builder = await this.builder;
     await Promise.all(RESIDENTS.map(async (dna, i) => {
@@ -144,6 +163,11 @@ export class Plaza {
     if (event.button !== 0) return;
     this.setPointer(event);
     const avatar = this.pickAvatar();
+    if (avatar && this.ai.get(avatar)?.remote) { // live friends can be inspected but not carried off (it would desync them)
+      avatar.face.express("happy", 1.2);
+      this.callbacks.avatarClick?.(avatar.dna);
+      return;
+    }
     if (avatar) {
       this.press = { avatar, x: event.clientX, y: event.clientY, grabbed: false };
       this.canvas.setPointerCapture(event.pointerId);

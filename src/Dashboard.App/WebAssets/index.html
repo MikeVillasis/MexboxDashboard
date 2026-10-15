@@ -90,9 +90,21 @@
             <p class="subtitle">your neighbours hang out here</p>
           </div>
           <div class="side-panel">
-            <h3>in the plaza</h3>
+            <h3>your friend code</h3>
+            <div class="friend-code"><span id="friend-code">······</span><em id="net-status" class="subtitle">offline</em></div>
+
+            <h3>add a friend</h3>
+            <form id="add-friend" class="add-friend interactive" autocomplete="off">
+              <input id="friend-input" maxlength="6" placeholder="ABC234" spellcheck="false">
+              <button class="pill small">connect</button>
+            </form>
+
+            <h3>friends</h3>
+            <ul id="friend-list" class="plain-list"><li class="subtitle">no friends yet. share your code!</li></ul>
+
+            <h3>residents</h3>
             <ul id="plaza-list" class="plain-list"></ul>
-            <p class="subtitle">friends join over the internet in a later update; until then these residents keep you company.</p>
+            <p class="subtitle">friends you've met keep hanging out here when they're offline.</p>
           </div>
         </div>
       </section>
@@ -148,6 +160,7 @@
   </div>
 
   <script src="js/bridge.js"></script>
+  <script src="vendor/peerjs/peerjs.min.js"></script>
   <script type="module" src="js/main.js"></script>
 </body>
 </html>

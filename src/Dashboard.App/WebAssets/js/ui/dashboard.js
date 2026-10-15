@@ -326,6 +326,27 @@ export class Dashboard extends EventTarget {
     this.dispatchEvent(new CustomEvent("avatarchange", { detail: { dna: this.dna } }));
   }
 
+  // ───────────── Friends ─────────────
+
+  setFriendCode(code) { $("friend-code").textContent = code; }
+
+  setNetStatus(status) { $("net-status").textContent = status; }
+
+  /// friends: [{ code, name, online, color }]
+  setFriends(friends) {
+    const list = $("friend-list");
+    if (friends.length === 0) { list.innerHTML = `<li class="subtitle">no friends yet. share your code!</li>`; return; }
+    list.replaceChildren(...friends.map((f) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<i class="dot"></i><i class="swatch"></i><span></span><em></em>`;
+      li.querySelector(".dot").classList.toggle("online", f.online);
+      li.querySelector(".swatch").style.background = f.color;
+      li.querySelector("span").textContent = f.name;
+      li.querySelector("em").textContent = f.online ? "in your plaza" : f.code;
+      return li;
+    }));
+  }
+
   setPlazaResidents(residents) {
     $("plaza-list").replaceChildren(...residents.map((dna) => {
       const li = document.createElement("li");
@@ -400,6 +421,17 @@ export class Dashboard extends EventTarget {
       this.focusAvatarOption(index);
       const step = e.target.closest(".step");
       if (step) this.stepAvatarOption(index, Number(step.dataset.step));
+    });
+
+    $("add-friend").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const input = $("friend-input");
+      const code = input.value.trim().toUpperCase();
+      if (!/^[A-HJ-NP-Z2-9]{6}$/.test(code)) { this.toast("friend codes are 6 letters/digits (no 0, 1, I or O)"); return; }
+      input.value = "";
+      input.blur();
+      this.dispatchEvent(new CustomEvent("connectfriend", { detail: { code } }));
+      this.toast(`calling ${code}…`);
     });
 
     $("gamertag").addEventListener("click", () => this.openGamercard());

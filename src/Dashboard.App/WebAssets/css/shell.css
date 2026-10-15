@@ -136,6 +136,20 @@ button { font: inherit; color: inherit; }
 .plain-list li { padding: 6px 0; display: flex; align-items: center; gap: 10px; }
 .plain-list .swatch { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,.7); }
 
+.friend-code { display: flex; align-items: baseline; gap: 14px; margin-bottom: 18px; }
+.friend-code span { font-size: 34px; letter-spacing: 0.18em; font-family: Consolas, monospace; user-select: text; }
+.add-friend { display: flex; gap: 10px; margin-bottom: 18px; }
+.add-friend input {
+  width: 160px; padding: 8px 12px; border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.6); background: rgba(0,0,0,.25); color: #fff;
+  font: 22px Consolas, monospace; letter-spacing: 0.15em; text-transform: uppercase;
+}
+.add-friend input:focus { outline: 2px solid rgba(255,255,255,.8); }
+.pill.small { padding: 6px 22px; border-radius: 999px; font-size: 17px; }
+.plain-list .dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255,255,255,.35); }
+.plain-list .dot.online { background: #9bf00b; box-shadow: 0 0 8px #9bf00b; }
+.plain-list em { margin-left: auto; font-style: normal; font-size: 14px; color: var(--muted); }
+
 .option-list { margin: 0; }
 .option-list li { height: 52px; justify-content: space-between; }
 .option-list .label { font-size: 18px; }

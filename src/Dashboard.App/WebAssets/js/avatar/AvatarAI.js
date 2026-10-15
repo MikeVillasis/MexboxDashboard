@@ -36,13 +36,14 @@ class Agent {
     this.partner = null;
     this.nextGestureAt = 0;
     this.anchored = false;        // local avatar while the customiser is open: stays home, facing the camera
+    this.remote = false;          // a live friend: moves only to targets their peer sends (MOVE packets)
     this.dropTarget = null;
     this.fall = 0;                // vertical speed after a drop
   }
 
   get id() { return this.avatar.id; }
   get position() { return this.avatar.root.position; }
-  get busy() { return this.state === State.SOCIALIZE || this.state === State.GRABBED || this.anchored; }
+  get busy() { return this.state === State.SOCIALIZE || this.state === State.GRABBED || this.anchored || this.remote; }
 }
 
 export class PlazaAI {
@@ -50,7 +51,8 @@ export class PlazaAI {
     this.agents = new Map();
     this.cooldowns = new Map(); // pairKey → time when allowed again
     this.time = 0;
-    this.onEvent = null; // (event, agent, other?) → used to report plaza activity
+    this.onEvent = null;  // (event, agent, other?) → used to report plaza activity
+    this.onTarget = null; // (agent, x, z) → an agent started walking somewhere (the local one is broadcast to peers)
   }
 
   add(avatar) {
@@ -60,6 +62,27 @@ export class PlazaAI {
   }
 
   get(avatar) { return this.agents.get(avatar.id); }
+
+  /// Live friends are driven by their peer; offline (or disconnected) friends roam like any resident.
+  setRemote(avatar, remote) {
+    const agent = this.get(avatar);
+    if (!agent) return;
+    agent.remote = remote;
+    this.endSocial(agent);
+    agent.state = State.IDLE;
+    agent.timer = remote ? Infinity : 2;
+  }
+
+  /// Walk an agent to a point: a MOVE packet for remotes, a floor click for the local avatar.
+  walkTo(avatar, x, z, announce = false) {
+    const agent = this.get(avatar);
+    if (!agent || agent.state === State.GRABBED) return;
+    this.endSocial(agent);
+    agent.state = State.WANDER;
+    agent.target.set(x, z);
+    agent.timer = agent.remote ? Infinity : 12;
+    if (announce) this.onTarget?.(agent, x, z);
+  }
 
   /// The local avatar is pinned home while the customiser blade is open.
   setAnchored(avatar, anchored) {
@@ -99,7 +122,7 @@ export class PlazaAI {
     let nearest = null;
     let best = SOCIAL_RANGE * 1.25;
     for (const other of this.agents.values()) {
-      if (other === agent || other.state === State.GRABBED || other.anchored) continue;
+      if (other === agent || other.state === State.GRABBED || other.anchored || other.remote) continue;
       const d = flatDistance(agent.position, other.position);
       if (d < best) { best = d; nearest = other; }
     }
@@ -124,6 +147,12 @@ export class PlazaAI {
     agent.timer -= dt;
     const avatar = agent.avatar;
 
+    if (agent.remote) {
+      // Peer-driven: arrive and wait for the next MOVE; never wander, emote or chat on our own initiative.
+      if (agent.state === State.WANDER && flatDistance(agent.position, agent.target) < 0.25) { agent.state = State.IDLE; agent.timer = Infinity; }
+      return;
+    }
+
     if (agent.anchored) {
       agent.state = State.WANDER;
       agent.target.set(0, 0);
@@ -142,6 +171,7 @@ export class PlazaAI {
           agent.state = State.WANDER;
           pickWanderTarget(agent);
           agent.timer = 12; // give up on unreachable targets
+          this.onTarget?.(agent, agent.target.x, agent.target.y);
         }
         break;
 
@@ -287,7 +317,7 @@ export class PlazaAI {
 const ORIGIN = new THREE.Vector3();
 
 function isFree(agent) {
-  return (agent.state === State.IDLE || agent.state === State.WANDER) && !agent.anchored && agent.position.y === 0;
+  return (agent.state === State.IDLE || agent.state === State.WANDER) && !agent.anchored && !agent.remote && agent.position.y === 0;
 }
 
 function pickWanderTarget(agent) {

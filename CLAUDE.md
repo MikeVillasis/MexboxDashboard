@@ -44,7 +44,11 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
   pair cooldowns); procedural walk/wave/laugh/nod/dangle layers in `ProceduralKit.animate`; plaza pointer: click avatar →
   bridge `InspectAvatar` → C# pushes OPEN_GAMERCARD; drag → grab/dangle, drop next to someone → instant chat.
   `--plaza-selftest` scripts grab→drop→inspect and logs PLAZA_EVENTs (keeps simulating unfocused).
-  Next phase: P2P sync (zero-cost).
+  Phase 5 done: `js/net/NetworkManager.js` (PeerJS 1.5.4 vendored; free public broker for signalling only, Google STUN,
+  data P2P). Packets JOIN_SYNC / MOVE / EMOTE / DNA_UPDATE, event-driven; peers identified by connection, packets
+  size/shape-checked and rate-limited; peer recipes validated by C# `FriendStore.Remember` (friends.json, friend code).
+  Live friends are AI `remote` agents (walk to MOVE targets only); offline friends roam as NPCs from cached recipes.
+  `--profile=name` (separate avatar/friends/log files) + `--connect=CODE` for two-instance testing on one machine.
 - SteamGridDB: intentionally left as-is (opt-in by API key, no UI). The owner does not plan to use it.
 
 ## Cover conventions

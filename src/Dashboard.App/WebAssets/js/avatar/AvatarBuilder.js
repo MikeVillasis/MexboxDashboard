@@ -131,6 +131,7 @@ export class Avatar {
 
   /// Plays a gesture ("wave" | "laugh" | "nod") once; the face reacts to match.
   gesture(name) {
+    this.onGesture?.(name); // the local avatar's gestures are broadcast to peers
     this.motion.gesture = name;
     this.motion.gestureTime = 0;
     if (name === "laugh") { this.face.express("happy", 1.6); this.face.talk(1.4); }

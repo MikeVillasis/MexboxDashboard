@@ -33,11 +33,13 @@ public sealed class XboxHostBridge
     private readonly IMediaService _media;
     private readonly WebShellActions _shell;
     private readonly AvatarProfileStore _avatar;
+    private readonly FriendStore _friends;
     private readonly string _coversDir = AppPaths.CoversDir.TrimEnd('\\');
 
-    public XboxHostBridge(GameLibraryService library, SoundService sounds, SettingsStore settings, IMediaService media, WebShellActions shell, AvatarProfileStore avatar)
+    public XboxHostBridge(GameLibraryService library, SoundService sounds, SettingsStore settings, IMediaService media, WebShellActions shell, AvatarProfileStore avatar, FriendStore friends)
     {
         _avatar = avatar;
+        _friends = friends;
         _library = library;
         _sounds = sounds;
         _settings = settings;
@@ -134,6 +136,40 @@ public sealed class XboxHostBridge
         if (saved is null) Log.Warn("Web: rejected an invalid avatar recipe");
         return saved?.ToJson() ?? string.Empty;
     }
+
+    // ───────────── P2P friends (phase 5) ─────────────
+
+    /// <summary>This player's friend code (also their PeerJS id suffix).</summary>
+    public string GetFriendCode() => _friends.FriendCode;
+
+    /// <summary>Cached friends: [{ code, lastSeen, dna }]. Offline friends roam the plaza as NPCs from these.</summary>
+    public string GetFriendsJson()
+    {
+        var list = new JsonArray();
+        foreach (var f in _friends.Friends)
+        {
+            list.Add(new JsonObject
+            {
+                ["code"] = f.Code,
+                ["lastSeen"] = f.LastSeen.ToString("O"),
+                ["dna"] = JsonNode.Parse(f.Dna.ToJson()),
+            });
+        }
+        return list.ToJsonString();
+    }
+
+    /// <summary>
+    /// A peer sent its recipe (JOIN_SYNC / DNA_UPDATE). Untrusted: C# validates, normalises, pins id = friend_CODE and
+    /// caches it. Returns the recipe to render, or an empty string to drop the peer's message.
+    /// </summary>
+    public string RememberFriend(string code, string dnaJson)
+    {
+        var dna = _friends.Remember(code, dnaJson);
+        if (dna is null) { Log.Warn($"Web: rejected recipe from peer '{code}'"); return string.Empty; }
+        return dna.ToJson();
+    }
+
+    public bool ForgetFriend(string code) => _friends.Forget(code);
 
     public string GetSettingsJson()
     {

@@ -2,12 +2,14 @@
 import { Dashboard } from "./ui/dashboard.js";
 import { Plaza } from "./scene/plaza.js";
 import { RESIDENTS } from "./avatar/residents.js";
+import { NetworkManager } from "./net/NetworkManager.js";
 
 const backend = Xbox.backend;
 const dashboard = new Dashboard(backend);
 const report = (event, avatar, other) => Xbox.send("PLAZA_EVENT", { event, id: avatar?.id, with: other?.id ?? null });
 const plaza = new Plaza(document.getElementById("viewport-3d"), {
-  floorClick: (x, z) => backend?.LogCanvasClick(x, z),
+  // A floor click sends your avatar walking there (and tells your friends, so theirs walks too).
+  floorClick: (x, z) => { backend?.LogCanvasClick(x, z); if (plaza.local) plaza.ai.walkTo(plaza.local, x, z, true); },
   avatarClick: (dna) => backend?.InspectAvatar(JSON.stringify(dna)), // C# answers with OPEN_GAMERCARD
   grab: (avatar) => { report("grab", avatar); backend?.PlaySound("Select"); },
   drop: (avatar) => { report("drop", avatar); backend?.PlaySound("Back"); },
@@ -26,6 +28,7 @@ dashboard.addEventListener("avatarchange", async (e) => {
   if (!saved) { console.warn("C# rejected the avatar recipe; reverting"); await loadAvatar(); return; }
   const normalised = JSON.parse(saved);
   if (JSON.stringify(normalised) !== JSON.stringify(e.detail.dna)) { dashboard.setAvatar(normalised); plaza.setLocalAvatar(normalised); }
+  net?.broadcast({ type: "DNA_UPDATE", dna: normalised });
 });
 dashboard.addEventListener("avatarpoke", () => {
   plaza.local?.face.express("happy", 2);
@@ -36,7 +39,85 @@ dashboard.addEventListener("avatarpoke", () => {
 async function loadAvatar() {
   const dna = JSON.parse(await backend.GetAvatarDnaJson());
   dashboard.setAvatar(dna);
-  await plaza.setLocalAvatar(dna);
+  const avatar = await plaza.setLocalAvatar(dna);
+  avatar.onGesture = (emote) => net?.broadcast({ type: "EMOTE", emote });
+}
+
+// ───────────── P2P friends ─────────────
+
+let net = null;
+const friends = new Map(); // code → { code, name, color, online }
+const friendAvatar = (code) => plaza.avatars.get(`friend_${code}`);
+const logNet = (event, peer = "", detail = "") => Xbox.send("NET_EVENT", { event, peer, detail });
+
+function renderFriends() { dashboard.setFriends([...friends.values()].sort((a, b) => b.online - a.online || a.name.localeCompare(b.name))); }
+
+/// Friends met before roam the plaza as NPCs from their cached recipes, even while they're offline.
+async function loadFriends() {
+  for (const f of JSON.parse(await backend.GetFriendsJson())) {
+    friends.set(f.code, { code: f.code, name: f.dna.name, color: f.dna.shirtColor, online: false });
+    plaza.upsertFriend(f.dna);
+  }
+  renderFriends();
+}
+
+/// A peer's recipe (JOIN_SYNC / DNA_UPDATE) only renders after C# has validated it.
+async function acceptRecipe(code, dna, position) {
+  const json = await backend.RememberFriend(code, JSON.stringify(dna));
+  if (!json) { logNet("rejected-recipe", code); return null; }
+  const clean = JSON.parse(json);
+  await plaza.upsertFriend(clean, { live: true, ...position });
+  friends.set(code, { code, name: clean.name, color: clean.shirtColor, online: true });
+  renderFriends();
+  return clean;
+}
+
+async function startNetwork(connectTo) {
+  const code = await backend.GetFriendCode();
+  dashboard.setFriendCode(code);
+  net = new NetworkManager(code, logNet);
+  // Wherever the local avatar decides to walk (its own AI, a floor click, the customiser sending it home), peers follow.
+  plaza.ai.onTarget = (agent, x, z) => { if (agent.avatar === plaza.local) net.broadcast({ type: "MOVE", x, z }); };
+
+  net.addEventListener("status", (e) => {
+    dashboard.setNetStatus(e.detail.status);
+    if (e.detail.status === "online" && connectTo) { net.connect(connectTo); connectTo = null; }
+  });
+  // Both sides introduce themselves as soon as the data channel opens.
+  net.addEventListener("peeropen", ({ detail }) => {
+    const me = plaza.local;
+    detail.conn.send({ type: "JOIN_SYNC", dna: dashboard.dna, x: me?.root.position.x ?? 0, z: me?.root.position.z ?? 0 });
+  });
+  net.addEventListener("join", async ({ detail }) => {
+    const dna = await acceptRecipe(detail.code, detail.dna, { x: detail.x, z: detail.z });
+    if (!dna) return;
+    logNet("join", detail.code, dna.name);
+    dashboard.toast(`${dna.name} joined your plaza`);
+    backend.PlaySound("Select");
+  });
+  net.addEventListener("move", ({ detail }) => {
+    const avatar = friendAvatar(detail.code);
+    if (avatar && plaza.ai.get(avatar)?.remote) { plaza.ai.walkTo(avatar, detail.x, detail.z); logNet("move", detail.code, `${detail.x.toFixed(2)},${detail.z.toFixed(2)}`); }
+  });
+  net.addEventListener("emote", ({ detail }) => {
+    friendAvatar(detail.code)?.gesture(detail.emote);
+    logNet("emote", detail.code, detail.emote);
+  });
+  net.addEventListener("dna", async ({ detail }) => {
+    const dna = await acceptRecipe(detail.code, detail.dna);
+    if (dna) logNet("dna-update", detail.code, dna.name);
+  });
+  // Gone offline: they keep wandering your plaza as an NPC.
+  net.addEventListener("peerleave", ({ detail }) => {
+    const avatar = friendAvatar(detail.code);
+    if (avatar) plaza.ai.setRemote(avatar, false);
+    const f = friends.get(detail.code);
+    if (f) { f.online = false; renderFriends(); dashboard.toast(`${f.name} left`); }
+  });
+  net.addEventListener("connectfailed", ({ detail }) => dashboard.toast(`${detail.code || "that friend"} isn't online right now`));
+  dashboard.addEventListener("connectfriend", (e) => net.connect(e.detail.code));
+
+  net.start();
 }
 
 async function loadLibrary() {
@@ -53,6 +134,7 @@ if (backend) {
     document.getElementById("system-version").textContent = `v${p.version}`;
     loadLibrary();
     loadAvatar();
+    loadFriends().then(() => startNetwork(p.connectTo));
     if (p.startBlade) dashboard.selectBladeByName(p.startBlade, false);
     if (p.plazaSelfTest) { selfTest = true; plaza.setRunning(true); setTimeout(plazaSelfTest, 8000); }
   });
@@ -69,6 +151,8 @@ if (backend) {
 
   // The browser has keyboard focus; forward keys so C# maps them exactly like controller input.
   document.addEventListener("keydown", (e) => {
+    // Typing a friend code is text entry, not navigation (Escape leaves the field).
+    if (e.target instanceof HTMLInputElement) { if (e.key === "Escape") e.target.blur(); return; }
     if (["Tab", " ", "Backspace", "ArrowUp", "ArrowDown", "PageUp", "PageDown"].includes(e.key)) e.preventDefault();
     Xbox.send("KEY", { key: e.key, shift: e.shiftKey });
   });

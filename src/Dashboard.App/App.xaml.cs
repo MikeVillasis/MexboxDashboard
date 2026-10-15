@@ -28,7 +28,8 @@ public partial class App : Application
         base.OnStartup(e);
 
         AppPaths.EnsureCreated();
-        Log.Initialize(AppPaths.LogPath);
+        // A --profile instance (P2P testing) logs separately: two processes appending to one file clobber each other.
+        Log.Initialize(AppPaths.ForProfile(AppPaths.LogPath, ArgValue(e.Args, "--profile=")));
         Log.Info($"Starting dashboard {typeof(App).Assembly.GetName().Version}");
 
         // Read off the UI thread while the rest of the graph is built; awaited just before the window is created.
@@ -67,6 +68,8 @@ public partial class App : Application
             var web = new Web.WebShellWindow(library, _media, sounds, _settings)
             {
                 // --blade=avatar opens on a given blade (handy for testing and desktop shortcuts).
+                Profile = ArgValue(e.Args, "--profile="),
+                ConnectTo = ArgValue(e.Args, "--connect=")?.ToUpperInvariant(),
                 PlazaSelfTest = e.Args.Contains("--plaza-selftest", StringComparer.OrdinalIgnoreCase),
                 StartBlade = e.Args.FirstOrDefault(a => a.StartsWith("--blade=", StringComparison.OrdinalIgnoreCase))?[8..],
             };
@@ -81,6 +84,11 @@ public partial class App : Application
         window.Show();
         _ = window.InitializeAsync();
     }
+
+    private static string? ArgValue(string[] args, string prefix) =>
+        args.FirstOrDefault(a => a.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))?[prefix.Length..] is { Length: > 0 } v
+            ? new string(v.Where(char.IsLetterOrDigit).ToArray())
+            : null;
 
     protected override void OnExit(ExitEventArgs e)
     {
