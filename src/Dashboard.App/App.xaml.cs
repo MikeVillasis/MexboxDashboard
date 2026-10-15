@@ -60,6 +60,17 @@ public partial class App : Application
         sounds.PreloadInBackground();
 
         await settingsLoad;
+
+        // Hybrid WebView2 shell (in development): same services, HTML/WebGL front end.
+        if (e.Args.Contains("--web", StringComparer.OrdinalIgnoreCase))
+        {
+            var web = new Web.WebShellWindow(library, _media, sounds, _settings);
+            MainWindow = web;
+            web.Show();
+            _ = _media.StartAsync(CancellationToken.None);
+            return;
+        }
+
         var window = new MainWindow(library, _media, sounds, covers, _settings);
         MainWindow = window;
         window.Show();

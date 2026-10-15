@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>xbox 360 dashboard</title>
+  <link rel="stylesheet" href="css/shell.css">
+</head>
+<body>
+  <main id="bridge-test">
+    <h1>web shell</h1>
+    <p class="subtitle">phase 1 · webview2 host bridge</p>
+
+    <ul class="checks">
+      <li id="check-host"><span class="dot"></span>host object <code>xboxBackend.Ping</code><em>waiting…</em></li>
+      <li id="check-message"><span class="dot"></span>message channel <code>PING → PONG</code><em>waiting…</em></li>
+      <li id="check-ready"><span class="dot"></span>host ready event<em>waiting…</em></li>
+      <li id="check-library"><span class="dot"></span>library<em>waiting…</em></li>
+    </ul>
+
+    <h2>input from c#</h2>
+    <ol id="nav-log" class="log"><li class="muted">press arrows / enter / esc, or use a controller</li></ol>
+  </main>
+
+  <script src="js/bridge.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>

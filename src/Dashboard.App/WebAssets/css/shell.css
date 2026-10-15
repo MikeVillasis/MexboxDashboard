@@ -1,0 +1,51 @@
+:root {
+  --green-top: #0e3a0e;
+  --green-bottom: #010a01;
+  --accent: #9bf00b;
+  --text: #ffffff;
+  --muted: rgba(255, 255, 255, 0.6);
+  --ok: #9bf00b;
+  --fail: #ff5a4a;
+  --pending: rgba(255, 255, 255, 0.35);
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-family: "Segoe UI", sans-serif;
+  font-weight: 600;
+  background: linear-gradient(var(--green-top), var(--green-bottom));
+  user-select: none;
+  cursor: default;
+}
+
+#bridge-test {
+  max-width: 760px;
+  margin: 8vh auto 0;
+  padding: 32px 40px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+}
+
+h1 { margin: 0; font-size: 44px; }
+h2 { margin: 28px 0 8px; font-size: 20px; }
+.subtitle { margin: 4px 0 24px; color: var(--muted); }
+
+.checks { list-style: none; margin: 0; padding: 0; }
+.checks li { display: flex; align-items: center; gap: 12px; padding: 8px 0; font-size: 18px; }
+.checks em { margin-left: auto; font-style: normal; color: var(--muted); font-size: 15px; }
+.checks code { color: var(--accent); }
+
+.dot { width: 14px; height: 14px; border-radius: 50%; background: var(--pending); flex: none; }
+.ok .dot { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+.fail .dot { background: var(--fail); box-shadow: 0 0 10px var(--fail); }
+
+.log { margin: 0; padding-left: 22px; max-height: 30vh; overflow: hidden; font-size: 15px; }
+.log li { padding: 2px 0; }
+.muted { color: var(--muted); list-style: none; margin-left: -22px; }

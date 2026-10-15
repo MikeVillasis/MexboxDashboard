@@ -25,6 +25,13 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
   `Settings/SettingsStore` (settings.json: sound, fullscreen, window bounds, last game; debounced atomic writes off the UI thread),
   focus animations (`Animation/FocusPop`, animated `BladeListItem`). Blades are `BitmapCache`d only while sliding
   (`Blade.SetCached`); keep animations inside the front blade to opacity/render transforms.
+- **WebView2 hybrid shell, phase 1 of 5 done** (run with `--web`; native WPF shell stays the default until the web UI
+  reaches parity). `Web/WebShellWindow` hosts WebView2 (WPF control; the app is WPF, not WinForms) serving
+  `WebAssets/` as `https://xbox.local/`. `Web/XboxHostBridge` = `hostObjects.xboxBackend` (thin forwards to existing
+  services, JSON strings out). `Web/WebMessageDispatcher` = `{type,payload}` envelopes both ways. Keyboard: the page
+  forwards `KEY`, C# maps to `NAV` (same as XInput). Events posted before page load are lost; put state in `HOST_READY`.
+  The `--web` shell relaxes the RAM/startup targets: about 150 MB host plus 340 MB in WebView2 processes, page ready about 2.7 s.
+  Next phases: 2D blades UI over a Three.js canvas, avatar DNA, plaza AI, P2P (zero-cost).
 - SteamGridDB: intentionally left as-is (opt-in by API key, no UI). The owner does not plan to use it.
 
 ## Cover conventions
