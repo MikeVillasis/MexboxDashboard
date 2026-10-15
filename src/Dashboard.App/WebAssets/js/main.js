@@ -1,12 +1,36 @@
 // Entry point: wires the C# bridge to the 2D dashboard (layer 10) and the 3D plaza (layer 1).
 import { Dashboard } from "./ui/dashboard.js";
 import { Plaza } from "./scene/plaza.js";
+import { RESIDENTS } from "./avatar/residents.js";
 
 const backend = Xbox.backend;
 const dashboard = new Dashboard(backend);
 const plaza = new Plaza(document.getElementById("viewport-3d"), (x, z) => backend?.LogCanvasClick(x, z));
 
 dashboard.addEventListener("bladechange", (e) => plaza.setBlade(e.detail.blade));
+dashboard.setPlazaResidents(RESIDENTS);
+plaza.spawnResidents();
+
+// Avatar edits: re-dress immediately for feedback, then let C# validate and persist; render whatever C# accepted.
+dashboard.addEventListener("avatarchange", async (e) => {
+  const avatar = await plaza.setLocalAvatar(e.detail.dna);
+  avatar.face.express("happy", 1.2);
+  const saved = await backend.SaveAvatarDnaJson(JSON.stringify(e.detail.dna));
+  if (!saved) { console.warn("C# rejected the avatar recipe; reverting"); await loadAvatar(); return; }
+  const normalised = JSON.parse(saved);
+  if (JSON.stringify(normalised) !== JSON.stringify(e.detail.dna)) { dashboard.setAvatar(normalised); plaza.setLocalAvatar(normalised); }
+});
+dashboard.addEventListener("avatarpoke", () => {
+  plaza.local?.face.express("happy", 2);
+  plaza.local?.face.talk(1.6);
+  backend.PlaySound("Select");
+});
+
+async function loadAvatar() {
+  const dna = JSON.parse(await backend.GetAvatarDnaJson());
+  dashboard.setAvatar(dna);
+  await plaza.setLocalAvatar(dna);
+}
 
 async function loadLibrary() {
   const [games, settings] = await Promise.all([backend.GetLibraryJson(), backend.GetSettingsJson()]);
@@ -21,6 +45,8 @@ if (backend) {
     dashboard.setMedia(p.media);
     document.getElementById("system-version").textContent = `v${p.version}`;
     loadLibrary();
+    loadAvatar();
+    if (p.startBlade) dashboard.selectBladeByName(p.startBlade, false);
   });
   Xbox.on("LIBRARY_CHANGED", loadLibrary);
   Xbox.on("MEDIA_UPDATED", (media) => dashboard.setMedia(media));
@@ -30,7 +56,6 @@ if (backend) {
     Xbox.on(type, (payload) => dashboard.handleCommand(type, payload));
   }
 
-  backend.GetProfileJson().then((json) => dashboard.setGamertag(JSON.parse(json).gamertag));
 
   // The browser has keyboard focus; forward keys so C# maps them exactly like controller input.
   document.addEventListener("keydown", (e) => {

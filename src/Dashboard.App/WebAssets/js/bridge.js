@@ -10,6 +10,11 @@
   const handlers = new Map();
 
   if (webview) {
+    // Uncaught page errors (including failed module imports) land in dashboard.log, not just DevTools.
+    const report = (message, where) => webview.postMessage({ type: "JS_ERROR", payload: { message: String(message), where: String(where || "") } });
+    window.addEventListener("error", (e) => report(e.message, `${e.filename}:${e.lineno}`));
+    window.addEventListener("unhandledrejection", (e) => report(e.reason && (e.reason.stack || e.reason), "promise"));
+
     webview.addEventListener("message", (event) => {
       const { type, payload } = event.data || {};
       const list = handlers.get(type);

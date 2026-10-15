@@ -35,7 +35,12 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
   vendored in `vendor/three`, import map, placeholder scene). `#dashboard-ui` is pointer-events:none; only `.interactive`
   elements take clicks, so empty glass falls through to the canvas. C# sends SWITCH_BLADE / NAVIGATE_DPAD / SELECT_ITEM /
   BACK / ACTION_X / ACTION_Y / OPEN_GAMERCARD; covers via `https://covers.xbox.local/`; SHELL_ACTIVE pauses WebGL.
-  Next phases: avatar DNA + camera director, plaza AI, P2P (zero-cost).
+  Phase 3 done: `Core/Avatars/AvatarDna` (validated/normalised in C#, ~210 bytes) + `AvatarProfileStore`
+  (localProfile.json); bridge `GetAvatarDnaJson` / `SaveAvatarDnaJson`. `js/avatar/AvatarBuilder.js`: shared skeleton,
+  swappable SkinnedMesh parts; procedural kit in use, GLTF kit (models/base_rig.glb + {slot}_{id}.glb) written but
+  untested without art. `FaceController.js`: 4x4 UV atlases shifted by texture.offset. `scene/CameraDirector.js`: per-blade
+  shots. Blades now: games, media, friends, avatar, system. `--blade=<name>` opens on a blade. JS errors → dashboard.log.
+  Next phases: plaza AI + grab/drop, P2P (zero-cost).
 - SteamGridDB: intentionally left as-is (opt-in by API key, no UI). The owner does not plan to use it.
 
 ## Cover conventions

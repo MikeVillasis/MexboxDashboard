@@ -6,6 +6,7 @@ using System.Windows.Media;
 using Dashboard.App.Audio;
 using Dashboard.App.Input;
 using Dashboard.Core.Abstractions;
+using Dashboard.Core.Avatars;
 using Dashboard.Core.Infrastructure;
 using Dashboard.Core.Models;
 using Dashboard.Core.Services;
@@ -30,6 +31,7 @@ public sealed class WebShellWindow : Window
     private readonly SoundService _sounds;
     private readonly SettingsStore _settings;
     private readonly IMediaService _media;
+    private readonly AvatarProfileStore _avatar = new(AppPaths.LocalProfilePath, Environment.UserName.ToLowerInvariant());
     private readonly WebView2 _webView = new();
     private readonly WebMessageDispatcher _messages;
     private readonly XInputService _gamepad;
@@ -38,6 +40,9 @@ public sealed class WebShellWindow : Window
     private bool _isFullscreen = true;
     private byte[]? _lastArtBytes;
     private string? _lastArtUri;
+
+    /// <summary>Blade to open on (e.g. "avatar"); null = games.</summary>
+    public string? StartBlade { get; init; }
 
     public WebShellWindow(GameLibraryService library, IMediaService media, SoundService sounds, SettingsStore settings)
     {
@@ -79,6 +84,7 @@ public sealed class WebShellWindow : Window
         Closed += (_, _) =>
         {
             _shutdown.Cancel();
+            _avatar.Flush(TimeSpan.FromMilliseconds(500));
             _gamepad.Dispose();
             _webView.Dispose();
         };
@@ -88,6 +94,7 @@ public sealed class WebShellWindow : Window
     {
         try
         {
+            var avatarLoad = _avatar.LoadAsync(); // off-thread, alongside WebView2 start-up
             var environment = await CoreWebView2Environment.CreateAsync(
                 browserExecutableFolder: null,
                 userDataFolder: Path.Combine(AppPaths.DataRoot, "WebView2"));
@@ -126,7 +133,8 @@ public sealed class WebShellWindow : Window
             core.NewWindowRequested += (_, e) => e.Handled = true;
 
             var actions = new WebShellActions(ToggleFullscreen, Close);
-            core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions));
+            await avatarLoad;
+            core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions, _avatar));
             _messages.Attach(core);
             RegisterHandlers();
 
@@ -141,6 +149,7 @@ public sealed class WebShellWindow : Window
                     ["games"] = _library.GetSnapshot().Count,
                     ["media"] = MediaJson(_media.Current),
                     ["soundEnabled"] = _sounds.Enabled,
+                    ["startBlade"] = StartBlade,
                 });
             };
 
@@ -167,6 +176,8 @@ public sealed class WebShellWindow : Window
             Log.Info($"Web: PING received ({payload?["sent"]})");
             _messages.Post("PONG", new JsonObject { ["echo"] = payload?["sent"]?.DeepClone(), ["host"] = "csharp" });
         });
+
+        _messages.On("JS_ERROR", payload => Log.Error($"Web: page error {payload?["message"]} at {payload?["where"]}"));
 
         _messages.On("PONG_ACK", payload => Log.Info($"Web: page confirmed PONG, round trip {payload?["roundTripMs"]} ms"));
 

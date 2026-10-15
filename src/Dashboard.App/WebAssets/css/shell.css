@@ -14,6 +14,12 @@
   --system-top: rgba(225, 215, 190, 0.6);
   --system-bottom: rgba(120, 112, 98, 0.66);
   --system-pill: linear-gradient(#e8dcc0, #8d8170);
+  --friends-top: rgba(250, 170, 60, 0.62);
+  --friends-bottom: rgba(170, 80, 10, 0.66);
+  --friends-pill: linear-gradient(#ffc56a, #d9700f);
+  --avatar-top: rgba(190, 150, 255, 0.62);
+  --avatar-bottom: rgba(90, 40, 170, 0.66);
+  --avatar-pill: linear-gradient(#cfa8ff, #6a2fc8);
   --gloss: linear-gradient(rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.08) 48%, rgba(255, 255, 255, 0) 52%);
 }
 
@@ -105,6 +111,46 @@ button { font: inherit; color: inherit; }
 .blade[data-blade="games"] { --top: var(--games-top); --bottom: var(--games-bottom); --pill: var(--games-pill); }
 .blade[data-blade="media"] { --top: var(--media-top); --bottom: var(--media-bottom); --pill: var(--media-pill); }
 .blade[data-blade="system"] { --top: var(--system-top); --bottom: var(--system-bottom); --pill: var(--system-pill); }
+.blade[data-blade="friends"] { --top: var(--friends-top); --bottom: var(--friends-bottom); --pill: var(--friends-pill); }
+.blade[data-blade="avatar"] { --top: var(--avatar-top); --bottom: var(--avatar-bottom); --pill: var(--avatar-pill); }
+
+/* Clear blades: the plaza is the content, so the body is only tinted at its left edge and not blurred. */
+.blade.clear .blade-body {
+  background: linear-gradient(90deg, var(--top), rgba(0, 0, 0, 0) 46%);
+  backdrop-filter: none;
+}
+.blade.clear .blade-body::before { display: none; }
+.side-panel {
+  position: absolute;
+  top: 108px; left: 28px; bottom: 24px;
+  width: 520px;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: linear-gradient(var(--top), var(--bottom));
+  backdrop-filter: blur(16px);
+  overflow: hidden;
+}
+.side-panel h3 { margin: 0 0 10px; font-size: 20px; }
+.plain-list { list-style: none; margin: 0 0 18px; padding: 0; font-size: 18px; }
+.plain-list li { padding: 6px 0; display: flex; align-items: center; gap: 10px; }
+.plain-list .swatch { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,.7); }
+
+.option-list { margin: 0; }
+.option-list li { height: 52px; justify-content: space-between; }
+.option-list .label { font-size: 18px; }
+.option-list .value { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.option-list .value span { min-width: 112px; text-align: center; }
+.option-list .swatch { width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(255,255,255,.8); }
+.option-list .step {
+  pointer-events: auto;
+  width: 30px; height: 30px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.6);
+  background: rgba(0,0,0,.2);
+  cursor: pointer;
+  font-size: 13px;
+}
+.option-list .step:hover { background: rgba(255,255,255,.25); }
 
 /* Translucent glass: the plaza shows through. Visual only, so empty glass passes clicks to the canvas. */
 .blade-tab, .blade-body {
@@ -150,6 +196,11 @@ button { font: inherit; color: inherit; }
   background: linear-gradient(rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0));
   pointer-events: none;
 }
+
+/* Blades behind the front one show only their tab strip. Their bodies are hidden once the slide finishes, otherwise
+   their stacked blurred glass smears the 3D plaza seen through the front blade. */
+.blade:not(.active) .blade-body { visibility: hidden; transition: visibility 0s 0.64s; }
+.blade.active .blade-body { visibility: visible; transition: visibility 0s; }
 
 /* Only the front blade's content is visible; it fades in after the slide starts. */
 .blade-body > * { opacity: 0; transition: opacity 0.16s; }

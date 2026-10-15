@@ -2,7 +2,24 @@
 // Input arrives as C# commands (NAVIGATE_DPAD, SWITCH_BLADE, SELECT_ITEM, BACK, ACTION_X/Y, OPEN_GAMERCARD) or as
 // pointer events on elements marked .interactive.
 
+import { CATALOG, PALETTES } from "../avatar/AvatarBuilder.js";
+import { EYE_STYLE_NAMES, MOUTH_STYLE_NAMES } from "../avatar/FaceController.js";
+
 const TAB = 56;
+
+// Customiser rows: each edits one DNA field, either an index into a catalogue list or a colour from a palette.
+const AVATAR_OPTIONS = [
+  { key: "skinColor", label: "skin tone", palette: PALETTES.skin },
+  { key: "headId", label: "head", names: CATALOG.head },
+  { key: "eyeUV", label: "eyes", names: EYE_STYLE_NAMES },
+  { key: "mouthUV", label: "mouth", names: MOUTH_STYLE_NAMES },
+  { key: "hairId", label: "hair", names: CATALOG.hair },
+  { key: "hairColor", label: "hair colour", palette: PALETTES.hair },
+  { key: "torsoId", label: "top", names: CATALOG.torso },
+  { key: "shirtColor", label: "top colour", palette: PALETTES.shirt },
+  { key: "legsId", label: "bottoms", names: CATALOG.legs },
+  { key: "legsColor", label: "bottoms colour", palette: PALETTES.legs },
+];
 const PAGE = 8;
 const $ = (id) => document.getElementById(id);
 
@@ -15,6 +32,8 @@ export class Dashboard extends EventTarget {
     this.games = [];
     this.gameIndex = 0;
     this.systemIndex = 0;
+    this.avatarIndex = 0;
+    this.dna = null;
     this.media = null;
     this.soundEnabled = true;
     this.lastPointer = null;
@@ -58,8 +77,11 @@ export class Dashboard extends EventTarget {
     if (vertical !== undefined) {
       if (blade === "games") this.focusGame(this.gameIndex + vertical, true);
       else if (blade === "system") this.focusSystem(this.systemIndex + vertical);
+      else if (blade === "avatar") this.focusAvatarOption(this.avatarIndex + Math.sign(vertical));
       return;
     }
+    // On the customiser left/right edit the focused option; LB/RB and B still leave the blade.
+    if (blade === "avatar" && this.dna) { this.stepAvatarOption(this.avatarIndex, direction === "left" ? -1 : 1); return; }
     // Left/right are free on every blade, so they switch blades (as in the native shell).
     this.selectBlade(this.selected + (direction === "left" ? -1 : 1));
   }
@@ -69,6 +91,7 @@ export class Dashboard extends EventTarget {
       case "games": this.launchFocused(); break;
       case "media": this.mediaCommand("MediaPlayPause"); break;
       case "system": this.runSystemItem(this.systemIndex); break;
+      case "avatar": this.dispatchEvent(new CustomEvent("avatarpoke")); break;
     }
   }
 
@@ -83,6 +106,13 @@ export class Dashboard extends EventTarget {
     this.layout(animate);
     this.sound("BladeSwoosh");
     this.dispatchEvent(new CustomEvent("bladechange", { detail: { blade: this.bladeName() } }));
+  }
+
+  selectBladeByName(name, animate = true) {
+    const index = this.blades.findIndex((b) => b.dataset.blade === name);
+    if (index < 0) return;
+    if (!animate) { this.selected = index; this.layout(false); this.dispatchEvent(new CustomEvent("bladechange", { detail: { blade: name } })); }
+    else this.selectBlade(index);
   }
 
   // Same geometry as the WPF BladeStackPanel: blades up to the selected one fan out as tabs on the left, the rest on the right.
@@ -117,6 +147,7 @@ export class Dashboard extends EventTarget {
     const set = (id, text) => { $(id).hidden = !text; $(id).querySelector("em").textContent = text || ""; };
     set("hint-x", blade === "media" ? "previous" : "");
     set("hint-y", blade === "media" ? "next track" : blade === "games" ? "cover art" : "");
+    $("hint-dpad").hidden = blade !== "avatar";
   }
 
   // ───────────── Games ─────────────
@@ -246,6 +277,62 @@ export class Dashboard extends EventTarget {
     this.systemItems[index].run();
   }
 
+  // ───────────── Avatar customiser ─────────────
+
+  setAvatar(dna) {
+    this.dna = { ...dna };
+    $("avatar-name").textContent = dna.name;
+    this.setGamertag(dna.name);
+    this.renderAvatarOptions();
+  }
+
+  renderAvatarOptions() {
+    $("avatar-options").replaceChildren(...AVATAR_OPTIONS.map((option, i) => {
+      const li = document.createElement("li");
+      li.dataset.index = i;
+      li.classList.toggle("focused", i === this.avatarIndex);
+      const value = this.dna?.[option.key];
+      const shown = option.palette
+        ? `<i class="swatch" style="background:${value}"></i>`
+        : `<span>${escapeHtml(option.names[value] ?? option.names[0])}</span>`;
+      li.innerHTML = `<span class="label"></span><span class="value"><button class="step" data-step="-1">&#x25C0;</button>${shown}<button class="step" data-step="1">&#x25B6;</button></span>`;
+      li.querySelector(".label").textContent = option.label;
+      return li;
+    }));
+  }
+
+  focusAvatarOption(index) {
+    index = Math.max(0, Math.min(AVATAR_OPTIONS.length - 1, index));
+    if (index === this.avatarIndex) return;
+    this.avatarIndex = index;
+    for (const li of $("avatar-options").children) li.classList.toggle("focused", Number(li.dataset.index) === index);
+    this.sound("Navigate");
+  }
+
+  /// Cycles one option and emits the full new recipe; main.js re-dresses the avatar and persists it through C#.
+  stepAvatarOption(index, delta) {
+    const option = AVATAR_OPTIONS[index];
+    const list = option.palette ?? option.names;
+    const current = option.palette
+      ? Math.max(0, list.findIndex((c) => c.toUpperCase() === String(this.dna[option.key]).toUpperCase()))
+      : this.dna[option.key];
+    const next = (current + delta + list.length) % list.length;
+    this.dna = { ...this.dna, [option.key]: option.palette ? list[next] : next };
+    this.renderAvatarOptions();
+    this.sound("Navigate");
+    this.dispatchEvent(new CustomEvent("avatarchange", { detail: { dna: this.dna } }));
+  }
+
+  setPlazaResidents(residents) {
+    $("plaza-list").replaceChildren(...residents.map((dna) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<i class="swatch"></i><span></span>`;
+      li.querySelector(".swatch").style.background = dna.shirtColor;
+      li.querySelector("span").textContent = dna.name;
+      return li;
+    }));
+  }
+
   // ───────────── Gamercard ─────────────
 
   async openGamercard() {
@@ -294,6 +381,15 @@ export class Dashboard extends EventTarget {
     $("media-toggle").addEventListener("click", () => this.mediaCommand("MediaPlayPause"));
     $("media-next").addEventListener("click", () => this.mediaCommand("MediaNext"));
 
+    $("avatar-options").addEventListener("click", (e) => {
+      const li = e.target.closest("li");
+      if (!li) return;
+      const index = Number(li.dataset.index);
+      this.focusAvatarOption(index);
+      const step = e.target.closest(".step");
+      if (step) this.stepAvatarOption(index, Number(step.dataset.step));
+    });
+
     $("gamertag").addEventListener("click", () => this.openGamercard());
     $("gamercard").addEventListener("click", (e) => { if (e.target === $("gamercard")) this.closeGamercard(); });
   }
@@ -315,6 +411,10 @@ export class Dashboard extends EventTarget {
     $("clock").textContent = now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }).toLowerCase();
     setTimeout(() => this.tickClock(), 60_000 - now.getSeconds() * 1000 - now.getMilliseconds() + 20);
   }
+}
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
 function initials(title) {

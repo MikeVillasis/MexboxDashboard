@@ -6,7 +6,7 @@
   <title>xbox 360 dashboard</title>
   <link rel="stylesheet" href="css/shell.css">
   <script type="importmap">
-    { "imports": { "three": "./vendor/three/three.module.min.js" } }
+    { "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
   </script>
 </head>
 <body>
@@ -81,6 +81,36 @@
         </div>
       </section>
 
+      <!-- Friends / plaza: clear glass, the 3D plaza is the content -->
+      <section class="blade clear" data-blade="friends" data-label="friends">
+        <div class="blade-tab interactive"><span>friends</span></div>
+        <div class="blade-body">
+          <div class="blade-header">
+            <h1>plaza</h1>
+            <p class="subtitle">your neighbours hang out here</p>
+          </div>
+          <div class="side-panel">
+            <h3>in the plaza</h3>
+            <ul id="plaza-list" class="plain-list"></ul>
+            <p class="subtitle">friends join over the internet in a later update; until then these residents keep you company.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Avatar customiser: clear glass, the camera frames your avatar on the right -->
+      <section class="blade clear" data-blade="avatar" data-label="avatar">
+        <div class="blade-tab interactive"><span>avatar</span></div>
+        <div class="blade-body">
+          <div class="blade-header">
+            <h1>my avatar</h1>
+            <p id="avatar-name" class="subtitle"></p>
+          </div>
+          <div class="side-panel">
+            <ul id="avatar-options" class="item-list option-list interactive"></ul>
+          </div>
+        </div>
+      </section>
+
       <!-- System -->
       <section class="blade" data-blade="system" data-label="system">
         <div class="blade-tab interactive"><span>system</span></div>
@@ -99,6 +129,7 @@
       <span><i class="btn b">B</i>back</span>
       <span id="hint-x" hidden><i class="btn x">X</i><em></em></span>
       <span id="hint-y" hidden><i class="btn y">Y</i><em></em></span>
+      <span id="hint-dpad" hidden><i class="btn sh">&#x25C0;</i><i class="btn sh">&#x25B6;</i>change</span>
       <span><i class="btn sh">LB</i><i class="btn sh">RB</i>switch blades</span>
     </footer>
 

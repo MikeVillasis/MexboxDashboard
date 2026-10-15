@@ -1,10 +1,15 @@
-// Layer 1: the 3D plaza behind the dashboard. Phase 2 placeholder: floor, sky, idle stand-in figures, click raycasting.
-// Avatars (phase 3) and the plaza AI (phase 4) build on this scene.
+// Layer 1: the 3D plaza behind the dashboard: floor, sky, avatars, camera director, click raycasting.
+// Phase 4 adds the plaza AI on top of the avatars spawned here.
 import * as THREE from "three";
+import { AvatarBuilder } from "../avatar/AvatarBuilder.js";
+import { RESIDENTS, RESIDENT_SPOTS } from "../avatar/residents.js";
+import { CameraDirector } from "./CameraDirector.js";
 
 const BLADE_TINT = {
   games: { sky: 0x2f7a1a, floor: 0x1f5a10, light: 0xc8ff9a },
   media: { sky: 0x1a5a96, floor: 0x103a66, light: 0xa8d8ff },
+  friends: { sky: 0x3a8ac0, floor: 0x3d7a2a, light: 0xffffff },
+  avatar: { sky: 0x8a6ac8, floor: 0x4a3a78, light: 0xfff0ff },
   system: { sky: 0x6a6252, floor: 0x4a4436, light: 0xfff0d0 },
 };
 
@@ -13,30 +18,34 @@ export class Plaza {
     this.canvas = canvas;
     this.onFloorClick = onFloorClick;
     this.clock = new THREE.Clock();
-    this.running = true;
+    this.avatars = new Map(); // id → Avatar
+    this.local = null;
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-    // Cap the backing store: the plaza sits behind blurred glass, full 4K buys nothing but GPU time.
+    // Cap the backing store: the plaza mostly sits behind blurred glass, full 4K buys nothing but GPU time.
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(BLADE_TINT.games.sky);
-    this.scene.fog = new THREE.Fog(BLADE_TINT.games.sky, 14, 42);
+    this.scene.fog = new THREE.Fog(BLADE_TINT.games.sky, 16, 46);
 
     this.camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
-    this.camera.position.set(0, 4.2, 12);
-    this.camera.lookAt(0, 1, 0);
+    this.director = new CameraDirector(this.camera);
 
     this.hemi = new THREE.HemisphereLight(BLADE_TINT.games.light, 0x0a1a05, 1.1);
     this.scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffffff, 1.6);
-    this.sun.position.set(6, 12, 8);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(1024, 1024);
-    Object.assign(this.sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12 });
-    this.scene.add(this.sun);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.7);
+    sun.position.set(5, 11, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.bias = -0.0005;
+    Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10 });
+    this.scene.add(sun);
+    const fill = new THREE.DirectionalLight(0xffffff, 0.45);
+    fill.position.set(-4, 3, 6);
+    this.scene.add(fill);
 
     this.floorMaterial = new THREE.MeshStandardMaterial({ color: BLADE_TINT.games.floor, roughness: 0.85 });
     this.floor = new THREE.Mesh(new THREE.CircleGeometry(30, 64), this.floorMaterial);
@@ -44,10 +53,10 @@ export class Plaza {
     this.floor.receiveShadow = true;
     this.scene.add(this.floor);
 
-    this.figures = this.addStandIns();
     this.marker = this.addMarker();
     this.raycaster = new THREE.Raycaster();
     this.pointer = new THREE.Vector2();
+    this.builder = new AvatarBuilder().init();
 
     canvas.addEventListener("pointerdown", (e) => this.handleClick(e));
     window.addEventListener("resize", () => this.resize());
@@ -56,30 +65,32 @@ export class Plaza {
     this.renderer.setAnimationLoop(() => this.frame());
   }
 
-  /// Placeholder figures (capsule body + sphere head) until the avatar pipeline exists.
-  addStandIns() {
-    const colors = [0x9bf00b, 0x5cc3ff, 0xffb347, 0xff6b9d, 0xe8dcc0];
-    const bodyGeo = new THREE.CapsuleGeometry(0.32, 0.8, 6, 16);
-    const headGeo = new THREE.SphereGeometry(0.3, 24, 16);
-    const skin = new THREE.MeshStandardMaterial({ color: 0xe0ac69, roughness: 0.6 });
+  // ───────────── Avatars ─────────────
 
-    return colors.map((color, i) => {
-      const figure = new THREE.Group();
-      const body = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({ color, roughness: 0.5 }));
-      body.position.y = 0.72;
-      const head = new THREE.Mesh(headGeo, skin);
-      head.position.y = 1.62;
-      for (const mesh of [body, head]) { mesh.castShadow = true; figure.add(mesh); }
-
-      const angle = (i / colors.length) * Math.PI * 2 + 0.4;
-      const radius = 3 + (i % 2) * 2.2;
-      figure.position.set(Math.cos(angle) * radius, 0, Math.sin(angle) * radius - 1);
-      figure.rotation.y = -angle + Math.PI / 2;
-      figure.userData.phase = i * 1.7;
-      this.scene.add(figure);
-      return figure;
-    });
+  /// Spawns (or re-dresses) the local player from the recipe C# provided.
+  async setLocalAvatar(dna) {
+    if (this.local) { await this.local.applyDna(dna); return this.local; }
+    const builder = await this.builder;
+    this.local = await builder.build(dna);
+    this.local.root.position.set(0, 0, 0);
+    this.scene.add(this.local.root);
+    this.avatars.set(dna.id, this.local);
+    return this.local;
   }
+
+  async spawnResidents() {
+    const builder = await this.builder;
+    await Promise.all(RESIDENTS.map(async (dna, i) => {
+      const avatar = await builder.build(dna);
+      const [x, z, facing] = RESIDENT_SPOTS[i % RESIDENT_SPOTS.length];
+      avatar.root.position.set(x, 0, z);
+      avatar.root.rotation.y = facing;
+      this.scene.add(avatar.root);
+      this.avatars.set(dna.id, avatar);
+    }));
+  }
+
+  // ───────────── Interaction ─────────────
 
   addMarker() {
     const ring = new THREE.Mesh(
@@ -106,13 +117,13 @@ export class Plaza {
     this.onFloorClick?.(hit.point.x, hit.point.z);
   }
 
-  /// Blade change → tint the world to match (smoothly, in frame()). The camera director arrives in phase 3.
+  /// Blade change → camera shot + world tint.
   setBlade(blade) {
-    this.target = BLADE_TINT[blade] ?? BLADE_TINT.games;
+    this.tint = BLADE_TINT[blade] ?? BLADE_TINT.games;
+    this.director.set(blade);
   }
 
   setRunning(running) {
-    this.running = running;
     this.renderer.setAnimationLoop(running ? () => this.frame() : null);
     if (running) this.clock.getDelta(); // drop the paused interval
   }
@@ -128,23 +139,20 @@ export class Plaza {
     const dt = Math.min(this.clock.getDelta(), 0.05);
     const t = this.clock.elapsedTime;
 
-    for (const f of this.figures) {
-      const p = f.userData.phase;
-      f.position.y = Math.abs(Math.sin(t * 1.6 + p)) * 0.06;
-      f.rotation.z = Math.sin(t * 0.8 + p) * 0.03;
-    }
+    for (const avatar of this.avatars.values()) avatar.update(dt);
+    this.director.update(dt, t);
 
     if (this.marker.material.opacity > 0) {
       this.marker.material.opacity = Math.max(0, this.marker.material.opacity - dt * 0.8);
       this.marker.scale.setScalar(this.marker.scale.x + dt * 1.6);
     }
 
-    if (this.target) {
+    if (this.tint) {
       const k = 1 - Math.exp(-dt * 4);
-      this.scene.background.lerp(new THREE.Color(this.target.sky), k);
+      this.scene.background.lerp(new THREE.Color(this.tint.sky), k);
       this.scene.fog.color.copy(this.scene.background);
-      this.floorMaterial.color.lerp(new THREE.Color(this.target.floor), k);
-      this.hemi.color.lerp(new THREE.Color(this.target.light), k);
+      this.floorMaterial.color.lerp(new THREE.Color(this.tint.floor), k);
+      this.hemi.color.lerp(new THREE.Color(this.tint.light), k);
     }
 
     this.renderer.render(this.scene, this.camera);

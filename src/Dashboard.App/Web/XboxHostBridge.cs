@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using Dashboard.App.Audio;
 using Dashboard.Core.Abstractions;
+using Dashboard.Core.Avatars;
 using Dashboard.Core.Infrastructure;
 using Dashboard.Core.Services;
 using Dashboard.Core.Settings;
@@ -31,10 +32,12 @@ public sealed class XboxHostBridge
     private readonly SettingsStore _settings;
     private readonly IMediaService _media;
     private readonly WebShellActions _shell;
+    private readonly AvatarProfileStore _avatar;
     private readonly string _coversDir = AppPaths.CoversDir.TrimEnd('\\');
 
-    public XboxHostBridge(GameLibraryService library, SoundService sounds, SettingsStore settings, IMediaService media, WebShellActions shell)
+    public XboxHostBridge(GameLibraryService library, SoundService sounds, SettingsStore settings, IMediaService media, WebShellActions shell, AvatarProfileStore avatar)
     {
+        _avatar = avatar;
         _library = library;
         _sounds = sounds;
         _settings = settings;
@@ -70,17 +73,31 @@ public sealed class XboxHostBridge
         return games.ToJsonString();
     }
 
-    /// <summary>Profile summary for the gamercard. Uses the Windows account name until avatar profiles land (phase 3).</summary>
+    /// <summary>Profile summary for the gamercard; the gamertag is the avatar recipe's name.</summary>
     public string GetProfileJson()
     {
         var games = _library.GetSnapshot();
         return new JsonObject
         {
-            ["gamertag"] = Environment.UserName.ToLowerInvariant(),
+            ["gamertag"] = _avatar.Current.Name,
             ["games"] = games.Count,
             ["launches"] = games.Sum(g => g.PlayCount),
             ["lastPlayed"] = games.Where(g => g.LastPlayed is not null).MaxBy(g => g.LastPlayed)?.Title,
         }.ToJsonString();
+    }
+
+    /// <summary>The local player's avatar DNA recipe (localProfile.json).</summary>
+    public string GetAvatarDnaJson() => _avatar.Current.ToJson();
+
+    /// <summary>
+    /// Stores an edited recipe (debounced write). C# validates it: bad colours/ids are normalised, junk is rejected.
+    /// Returns the normalised recipe the page should render, or an empty string when rejected.
+    /// </summary>
+    public string SaveAvatarDnaJson(string json)
+    {
+        var saved = _avatar.Update(json);
+        if (saved is null) Log.Warn("Web: rejected an invalid avatar recipe");
+        return saved?.ToJson() ?? string.Empty;
     }
 
     public string GetSettingsJson()

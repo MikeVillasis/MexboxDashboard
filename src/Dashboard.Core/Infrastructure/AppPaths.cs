@@ -14,6 +14,9 @@ public static class AppPaths
 
     public static string SettingsPath => Path.Combine(DataRoot, "settings.json");
 
+    /// <summary>The local player's avatar DNA recipe.</summary>
+    public static string LocalProfilePath => Path.Combine(DataRoot, "localProfile.json");
+
     /// <summary>Optional SteamGridDB API key (plain text). STEAMGRIDDB_API_KEY overrides it.</summary>
     public static string SteamGridDbKeyPath => Path.Combine(DataRoot, "steamgriddb.key");
 
