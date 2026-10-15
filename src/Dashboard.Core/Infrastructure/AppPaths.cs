@@ -12,6 +12,8 @@ public static class AppPaths
 
     public static string LogPath => Path.Combine(DataRoot, "dashboard.log");
 
+    public static string SettingsPath => Path.Combine(DataRoot, "settings.json");
+
     /// <summary>Optional SteamGridDB API key (plain text). STEAMGRIDDB_API_KEY overrides it.</summary>
     public static string SteamGridDbKeyPath => Path.Combine(DataRoot, "steamgriddb.key");
 

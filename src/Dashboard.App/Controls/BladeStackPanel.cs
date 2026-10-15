@@ -28,6 +28,7 @@ public sealed class BladeStackPanel : Panel
 
     private readonly SpringEase _ease;
     private Size _arrangedSize;
+    private int _slideVersion;
     private int _arrangedCount;
 
     public BladeStackPanel()
@@ -89,6 +90,7 @@ public sealed class BladeStackPanel : Panel
         if (count == 0 || _arrangedSize.Width <= 0) return;
 
         var selected = Math.Clamp(SelectedIndex, 0, count - 1);
+        var version = ++_slideVersion;
         for (var i = 0; i < count; i++)
         {
             var child = InternalChildren[i];
@@ -100,7 +102,9 @@ public sealed class BladeStackPanel : Panel
             if (animate)
             {
                 var slide = new DoubleAnimation(target, SlideDuration) { EasingFunction = _ease };
-                slide.Freeze();
+                // A timeline carrying a Completed handler is left unfrozen.
+                if (i == count - 1) slide.Completed += (_, _) => OnSlideSettled(version);
+                else slide.Freeze();
                 transform.BeginAnimation(TranslateTransform.XProperty, slide, HandoffBehavior.SnapshotAndReplace);
             }
             else
@@ -109,7 +113,22 @@ public sealed class BladeStackPanel : Panel
                 transform.X = target;
             }
 
-            if (child is Blade blade) blade.IsActive = i == selected;
+            if (child is Blade blade)
+            {
+                blade.IsActive = i == selected;
+                blade.SetCached(animate || i != selected);
+            }
+        }
+    }
+
+    /// <summary>Only the latest slide counts: an interrupted one must not uncache a blade that is moving again.</summary>
+    private void OnSlideSettled(int version)
+    {
+        if (version != _slideVersion) return;
+        var selected = Math.Clamp(SelectedIndex, 0, InternalChildren.Count - 1);
+        for (var i = 0; i < InternalChildren.Count; i++)
+        {
+            if (InternalChildren[i] is Blade blade) blade.SetCached(i != selected);
         }
     }
 

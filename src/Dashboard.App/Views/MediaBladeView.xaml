@@ -23,7 +23,7 @@
 
         <!-- Active session -->
         <!-- Centred in the blade at 1.5x; the Viewbox only scales down, so small windows still fit. -->
-        <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center"
+        <Viewbox x:Name="Session" Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center"
                  Margin="0,0,0,40"
                  Visibility="{Binding HasSession, Converter={StaticResource BoolToVis}}">
             <StackPanel Orientation="Horizontal" Margin="54">

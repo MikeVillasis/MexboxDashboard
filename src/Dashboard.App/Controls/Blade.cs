@@ -49,6 +49,12 @@ public sealed class Blade : ContentControl
         Loaded += (_, _) => _cache.RenderAtScale = VisualTreeHelper.GetDpi(this).DpiScaleX;
     }
 
+    /// <summary>
+    /// The texture cache only pays off while the blade moves. The front blade drops it once it settles, so focus
+    /// animations inside it redraw just the animated elements instead of re-rasterising the whole blade every frame.
+    /// </summary>
+    internal void SetCached(bool cached) => CacheMode = cached ? _cache : null;
+
     public event RoutedEventHandler ActivationRequested
     {
         add => AddHandler(ActivationRequestedEvent, value);

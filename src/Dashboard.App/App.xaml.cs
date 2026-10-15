@@ -11,6 +11,7 @@ using Dashboard.Core.Scanners.Riot;
 using Dashboard.Core.Scanners.Steam;
 using Dashboard.Core.Scanners.Xbox;
 using Dashboard.Core.Services;
+using Dashboard.Core.Settings;
 
 namespace Dashboard.App;
 
@@ -20,14 +21,19 @@ namespace Dashboard.App;
 public partial class App : Application
 {
     private IMediaService? _media;
+    private SettingsStore? _settings;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
 
         AppPaths.EnsureCreated();
         Log.Initialize(AppPaths.LogPath);
         Log.Info($"Starting dashboard {typeof(App).Assembly.GetName().Version}");
+
+        // Read off the UI thread while the rest of the graph is built; awaited just before the window is created.
+        _settings = new SettingsStore(AppPaths.SettingsPath);
+        var settingsLoad = _settings.LoadAsync();
 
         DispatcherUnhandledException += OnDispatcherUnhandledException;
         TaskScheduler.UnobservedTaskException += (_, args) =>
@@ -53,7 +59,8 @@ public partial class App : Application
         var sounds = new SoundService(Path.Combine(AppContext.BaseDirectory, "Assets", "Sounds"));
         sounds.PreloadInBackground();
 
-        var window = new MainWindow(library, _media, sounds, covers);
+        await settingsLoad;
+        var window = new MainWindow(library, _media, sounds, covers, _settings);
         MainWindow = window;
         window.Show();
         _ = window.InitializeAsync();
@@ -62,6 +69,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _media?.Dispose();
+        _settings?.Flush(TimeSpan.FromMilliseconds(500));
         Log.Info("Dashboard exiting");
         Log.Shutdown(TimeSpan.FromMilliseconds(500));
         base.OnExit(e);

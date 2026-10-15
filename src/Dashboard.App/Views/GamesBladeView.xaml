@@ -70,7 +70,7 @@
 
         <!-- Focused game preview: large cover centred in the column, with a floor reflection.
              The Viewbox only ever scales down, so smaller windows still fit the whole group. -->
-        <Viewbox Grid.Row="1" Grid.Column="1" Margin="40,0,0,0"
+        <Viewbox x:Name="Preview" Grid.Row="1" Grid.Column="1" Margin="40,0,0,0"
                  Stretch="Uniform" StretchDirection="DownOnly"
                  HorizontalAlignment="Center" VerticalAlignment="Center"
                  DataContext="{Binding SelectedGame}"

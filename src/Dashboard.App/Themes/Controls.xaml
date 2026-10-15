@@ -37,8 +37,15 @@
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Template">
             <Setter.Value>
+                <!-- Focus animation: the highlight fades in with a short scale "pop" and fades out when focus leaves.
+                     Only opacity and a render transform animate, so no layout pass runs per frame. -->
                 <ControlTemplate TargetType="ListBoxItem">
-                    <Grid Margin="0,2" Background="Transparent">
+                    <Grid x:Name="Root" Margin="0,2" Background="Transparent" RenderTransformOrigin="0.5,0.5">
+                        <Grid.RenderTransform>
+                            <ScaleTransform />
+                        </Grid.RenderTransform>
+                        <Border x:Name="Hover" CornerRadius="9" Opacity="0"
+                                Background="{DynamicResource ListHighlightBrush}" />
                         <Border x:Name="Body" CornerRadius="9" Opacity="0"
                                 Background="{DynamicResource ListHighlightBrush}"
                                 BorderBrush="#99FFFFFF" BorderThickness="1" />
@@ -50,11 +57,49 @@
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Body" Property="Opacity" Value="0.3" />
+                            <Setter TargetName="Hover" Property="Opacity" Value="0.3" />
                         </Trigger>
                         <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Body" Property="Opacity" Value="1" />
-                            <Setter TargetName="Gloss" Property="Opacity" Value="1" />
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Body" Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0:0:0.14" />
+                                        <DoubleAnimation Storyboard.TargetName="Gloss" Storyboard.TargetProperty="Opacity"
+                                                         To="1" Duration="0:0:0.14" />
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Root"
+                                                                       Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)">
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0" Value="0.97" />
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.09" Value="1.03">
+                                                <EasingDoubleKeyFrame.EasingFunction><QuadraticEase EasingMode="EaseOut" /></EasingDoubleKeyFrame.EasingFunction>
+                                            </EasingDoubleKeyFrame>
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.24" Value="1">
+                                                <EasingDoubleKeyFrame.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.4" /></EasingDoubleKeyFrame.EasingFunction>
+                                            </EasingDoubleKeyFrame>
+                                        </DoubleAnimationUsingKeyFrames>
+                                        <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Root"
+                                                                       Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)">
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0" Value="0.97" />
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.09" Value="1.03">
+                                                <EasingDoubleKeyFrame.EasingFunction><QuadraticEase EasingMode="EaseOut" /></EasingDoubleKeyFrame.EasingFunction>
+                                            </EasingDoubleKeyFrame>
+                                            <EasingDoubleKeyFrame KeyTime="0:0:0.24" Value="1">
+                                                <EasingDoubleKeyFrame.EasingFunction><BackEase EasingMode="EaseOut" Amplitude="0.4" /></EasingDoubleKeyFrame.EasingFunction>
+                                            </EasingDoubleKeyFrame>
+                                        </DoubleAnimationUsingKeyFrames>
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="Body" Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.18" />
+                                        <DoubleAnimation Storyboard.TargetName="Gloss" Storyboard.TargetProperty="Opacity"
+                                                         To="0" Duration="0:0:0.18" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>

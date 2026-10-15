@@ -3,7 +3,7 @@
 A native Windows games launcher and media controller styled after the 2005 Xbox 360 "Blades" dashboard.
 C# / .NET 8 / WPF, no Electron or CEF.
 
-## Status: Phase 4 (all storefronts, cover pipeline, system media)
+## Status: complete (phases 1–5)
 
 | Phase | Scope | State |
 |---|---|---|
@@ -11,7 +11,7 @@ C# / .NET 8 / WPF, no Electron or CEF.
 | 2 | (folded into 1) data model and schema | **done** |
 | 3 | Xbox / Epic / Battle.net / Riot scanners, cover pipeline (400x600 transcode, platform caches, SteamGridDB, icon fallback) | **done** |
 | 4 | WinRT SMTC media service (`GlobalSystemMediaTransportControlsSessionManager`) | **done** |
-| 5 | Visual polish pass: blade audio, focus animations, settings persistence | next |
+| 5 | Visual polish pass: blade audio, focus animations, settings persistence | **done** |
 
 Supported storefronts:
 
@@ -36,7 +36,10 @@ dotnet run --project src\Dashboard.App
 dotnet publish src\Dashboard.App -c Release -r win-x64 --self-contained false -o publish
 ```
 
-Data lives in `%AppData%\Xbox360Launcher\` (`library.db`, `Covers\`, `dashboard.log`).
+Data lives in `%AppData%\Xbox360Launcher\` (`library.db`, `settings.json`, `Covers\`, `dashboard.log`).
+
+**Settings** persist automatically: sound on/off and fullscreen/windowed (System blade or F11), the last windowed
+size and position (ignored if that monitor is gone), and the focused game. Delete `settings.json` to reset.
 
 **Optional SteamGridDB covers.** Games with no art from their own launcher can pull a portrait grid from
 [SteamGridDB](https://www.steamgriddb.com/profile/preferences/api). Put your API key in the `STEAMGRIDDB_API_KEY`
@@ -127,7 +130,7 @@ so play/pause never re-decodes the image. Packaged players get their display nam
 
 **Threading.** The UI thread only renders and handles input. SQLite, registry, manifest parsing, image decoding, logging and ShellExecute all run on the thread pool; results come back through `Dispatcher.InvokeAsync`. XInput polls on its own thread and drops to 10 Hz while the window is inactive.
 
-**60 FPS blades.** Each blade is arranged once at a fixed size and cached as a GPU texture (`BitmapCache`, at the monitor's DPI). Switching blades animates only `TranslateTransform.X`, so frames are pure compositing with no layout or re-tessellation. The blade body is a single retained `OnRender` drawing, and the drop shadow is faked with offset geometry instead of a pixel shader. The breathing aura is the only perpetual animation, and it pauses when the window loses focus or minimises so WPF's render loop can idle while a game runs.
+**60 FPS blades.** Each blade is arranged once at a fixed size and cached as a GPU texture (`BitmapCache`, at the monitor's DPI) while it slides; the front blade drops its cache once settled, so focus animations (list highlight pop, preview and album-art settle) redraw only what moves. Switching blades animates only `TranslateTransform.X`, so frames are pure compositing with no layout or re-tessellation. The blade body is a single retained `OnRender` drawing, and the drop shadow is faked with offset geometry instead of a pixel shader. The breathing aura is the only perpetual animation, and it pauses when the window loses focus or minimises so WPF's render loop can idle while a game runs.
 
 **Startup.** No DI container, no reflection-based JSON, ReadyToRun on publish, cache read off-thread, and the window shows before the library is loaded. `dashboard.log` records "Library on screen N ms after window creation" for measuring against the 500 ms target.
 
@@ -138,6 +141,5 @@ so play/pause never re-decodes the image. Packaged players get their display nam
 - WebP decoding (Battle.net box art, `.webp` custom covers) relies on the Windows WebP codec, which ships with Windows 11 and most Windows 10 installs. Without it those games fall back to their executable icon.
 - Xbox titles with no `MicrosoftGame.config` that also sit outside every `.GamingRoot` folder (older UWP games) are not detected.
 - Generated covers carry no title text. The list row and preview already show the title.
-- Settings (sound on/off, windowed mode) are not persisted yet.
 - UI sounds are synthesised by `tools/generate_sounds.py` (original, no third-party rights). `SoundPlayer` plays one cue at a time, so a new cue cuts the previous one.
 - The "Convection" typeface is not bundled. The UI uses Segoe UI Semibold; change `DashFont` in `Themes/Palette.xaml`.

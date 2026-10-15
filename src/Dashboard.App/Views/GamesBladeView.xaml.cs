@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Dashboard.App.Animation;
 using Dashboard.App.Input;
 using Dashboard.App.ViewModels;
 using Microsoft.Win32;
@@ -75,7 +76,9 @@ public partial class GamesBladeView : UserControl, IBladeView
 
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (GameList.SelectedItem is { } item) GameList.ScrollIntoView(item);
+        if (GameList.SelectedItem is not { } item) return;
+        GameList.ScrollIntoView(item);
+        if (e.RemovedItems.Count > 0) FocusPop.Play(Preview); // not on first load
     }
 
     private void OnListDoubleClick(object sender, MouseButtonEventArgs e)

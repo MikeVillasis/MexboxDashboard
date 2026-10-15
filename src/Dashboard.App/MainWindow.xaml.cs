@@ -15,6 +15,7 @@ using Dashboard.App.ViewModels;
 using Dashboard.Core.Abstractions;
 using Dashboard.Core.Infrastructure;
 using Dashboard.Core.Services;
+using Dashboard.Core.Settings;
 
 namespace Dashboard.App;
 
@@ -30,6 +31,7 @@ public partial class MainWindow : Window
     private readonly GameLibraryService _library;
     private readonly IMediaService _media;
     private readonly SoundService _sounds;
+    private readonly SettingsStore _settings;
     private readonly XInputService _gamepad;
     private readonly GamesBladeViewModel _gamesVm;
     private readonly MediaViewModel _mediaVm;
@@ -46,13 +48,16 @@ public partial class MainWindow : Window
     private bool _isFullscreen = true;
     private DateTime _lastScanUtc = DateTime.MinValue;
 
-    public MainWindow(GameLibraryService library, IMediaService media, SoundService sounds, ICoverArtService covers)
+    public MainWindow(GameLibraryService library, IMediaService media, SoundService sounds, ICoverArtService covers, SettingsStore settings)
     {
         InitializeComponent();
 
         _library = library;
         _media = media;
         _sounds = sounds;
+        _settings = settings;
+        _sounds.Enabled = settings.Current.SoundEnabled;
+        if (!settings.Current.Fullscreen) ApplyDisplayMode(fullscreen: false);
         _fadeEase.Freeze();
 
         _mediaVm = new MediaViewModel(media, Dispatcher);
@@ -63,6 +68,11 @@ public partial class MainWindow : Window
             sounds.Enabled);
 
         GamesView.DataContext = _gamesVm;
+        _gamesVm.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(GamesBladeViewModel.SelectedGame) && _gamesVm.SelectedGame is { } game)
+                _settings.Update(s => s with { LastGameId = game.Id });
+        };
         MediaView.DataContext = _mediaVm;
         SystemView.DataContext = _systemVm;
 
@@ -94,6 +104,7 @@ public partial class MainWindow : Window
         Activated += OnWindowActivated;
         Deactivated += OnWindowDeactivated;
         StateChanged += (_, _) => SetAmbientPaused(WindowState == WindowState.Minimized);
+        Closing += (_, _) => RememberWindowBounds();
         Closed += OnWindowClosed;
 
         SelectBlade(0, animate: false);
@@ -106,7 +117,7 @@ public partial class MainWindow : Window
         {
             var startup = Stopwatch.StartNew();
             var cached = await _library.LoadCacheAsync(_shutdown.Token);
-            _gamesVm.ReplaceAll(cached);
+            _gamesVm.ReplaceAll(cached, _settings.Current.LastGameId);
             _systemVm.RefreshStats();
             Log.Info($"Library on screen {startup.ElapsedMilliseconds} ms after window creation");
 
@@ -308,27 +319,68 @@ public partial class MainWindow : Window
 
     private void ToggleFullscreen()
     {
-        _isFullscreen = !_isFullscreen;
-        if (_isFullscreen)
+        RememberWindowBounds();
+        ApplyDisplayMode(!_isFullscreen);
+        _settings.Update(s => s with { Fullscreen = _isFullscreen });
+    }
+
+    private void ApplyDisplayMode(bool fullscreen)
+    {
+        _isFullscreen = fullscreen;
+        if (fullscreen)
         {
             WindowState = WindowState.Normal; // must leave Maximized before changing style or the taskbar stays visible
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             WindowState = WindowState.Maximized;
+            return;
+        }
+
+        WindowState = WindowState.Normal;
+        WindowStyle = WindowStyle.SingleBorderWindow;
+        ResizeMode = ResizeMode.CanResize;
+
+        if (_settings.Current.WindowBounds is { } saved && IsOnScreen(saved))
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = saved.Left;
+            Top = saved.Top;
+            Width = saved.Width;
+            Height = saved.Height;
+            if (saved.Maximized) WindowState = WindowState.Maximized;
         }
         else
         {
-            WindowState = WindowState.Normal;
-            WindowStyle = WindowStyle.SingleBorderWindow;
-            ResizeMode = ResizeMode.CanResize;
             Width = 1600;
             Height = 900;
+            Left = SystemParameters.WorkArea.Left + (SystemParameters.WorkArea.Width - Width) / 2;
+            Top = SystemParameters.WorkArea.Top + (SystemParameters.WorkArea.Height - Height) / 2;
         }
+    }
+
+    /// <summary>Stores the windowed-mode bounds (RestoreBounds when maximized) so the next windowed start reopens there.</summary>
+    private void RememberWindowBounds()
+    {
+        if (_isFullscreen) return;
+        var maximized = WindowState == WindowState.Maximized;
+        var rect = maximized ? RestoreBounds : new Rect(Left, Top, ActualWidth, ActualHeight);
+        if (rect.IsEmpty || rect.Width < 200 || rect.Height < 150) return;
+        _settings.Update(s => s with { WindowBounds = new WindowBounds(rect.Left, rect.Top, rect.Width, rect.Height, maximized) });
+    }
+
+    /// <summary>Guards against a monitor that was unplugged since the bounds were saved.</summary>
+    private static bool IsOnScreen(WindowBounds b)
+    {
+        var screen = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+            SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+        var title = new Rect(b.Left + 40, b.Top, Math.Max(1, b.Width - 80), 32); // the title bar must stay grabbable
+        return b.Width >= 200 && b.Height >= 150 && screen.IntersectsWith(title);
     }
 
     private bool ToggleSound()
     {
         _sounds.Enabled = !_sounds.Enabled;
+        _settings.Update(s => s with { SoundEnabled = _sounds.Enabled });
         return _sounds.Enabled;
     }
 

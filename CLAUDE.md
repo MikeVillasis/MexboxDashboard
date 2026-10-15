@@ -20,9 +20,12 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
 - **Phase 4 done.** `Services/SmtcMediaService` over WinRT `GlobalSystemMediaTransportControlsSessionManager`
   (events only, no polling), registered in `App.xaml.cs`; `NullMediaService` removed. Keep the thumbnail `byte[]` reference
   stable for an unchanged track: `MediaViewModel` re-decodes only when the reference changes.
-- **Phase 5 in progress.** Done: hover-to-focus game list, 600x850 centred preview with VisualBrush reflection, bigger play pill,
-  Media blade centred at 1.5x, synthesised UI sounds (`tools/generate_sounds.py` → `Assets/Sounds`).
-  Left: settings persistence (sound, windowed mode, SteamGridDB key UI), focus animations.
+- **Phase 5 done.** Hover-to-focus game list, 600x850 centred preview with VisualBrush reflection, bigger play pill,
+  Media blade centred at 1.5x, synthesised UI sounds (`tools/generate_sounds.py` → `Assets/Sounds`),
+  `Settings/SettingsStore` (settings.json: sound, fullscreen, window bounds, last game; debounced atomic writes off the UI thread),
+  focus animations (`Animation/FocusPop`, animated `BladeListItem`). Blades are `BitmapCache`d only while sliding
+  (`Blade.SetCached`); keep animations inside the front blade to opacity/render transforms.
+- SteamGridDB: intentionally left as-is (opt-in by API key, no UI). The owner does not plan to use it.
 
 ## Cover conventions
 - Scanners never set `CoverArtPath`. They put art hints in `Metadata` using `GameMetadataKeys`

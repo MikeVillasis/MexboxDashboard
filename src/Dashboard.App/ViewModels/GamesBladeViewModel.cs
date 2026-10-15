@@ -90,9 +90,10 @@ public sealed class GamesBladeViewModel : ObservableObject
     public bool IsSupportedCover(string path) => _covers.IsSupportedImage(path);
 
     /// <summary>Initial population from the cache: one collection swap instead of N change notifications.</summary>
-    public void ReplaceAll(IEnumerable<GameEntry> entries)
+    /// <param name="preferredId">Game to focus when nothing is selected yet (the one focused when the dashboard last closed).</param>
+    public void ReplaceAll(IEnumerable<GameEntry> entries, string? preferredId = null)
     {
-        var previousId = SelectedGame?.Id;
+        var previousId = SelectedGame?.Id ?? preferredId;
         _byId.Clear();
 
         var items = entries.Select(e => new GameItemViewModel(e)).ToList();
