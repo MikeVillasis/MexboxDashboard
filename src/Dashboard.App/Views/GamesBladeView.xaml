@@ -34,6 +34,7 @@
                  ItemsSource="{Binding Games}"
                  SelectedItem="{Binding SelectedGame, Mode=TwoWay}"
                  SelectionChanged="OnSelectionChanged"
+                 PreviewMouseMove="OnListMouseMove"
                  MouseDoubleClick="OnListDoubleClick">
             <ListBox.ItemTemplate>
                 <DataTemplate>
@@ -67,23 +68,46 @@
                        TextWrapping="Wrap" TextAlignment="Center" MaxWidth="460" />
         </StackPanel>
 
-        <!-- Selected game preview -->
-        <Viewbox Grid.Row="1" Grid.Column="1" Margin="48,0,0,72"
+        <!-- Focused game preview: large cover centred in the column, with a floor reflection.
+             The Viewbox only ever scales down, so smaller windows still fit the whole group. -->
+        <Viewbox Grid.Row="1" Grid.Column="1" Margin="40,0,0,0"
                  Stretch="Uniform" StretchDirection="DownOnly"
-                 HorizontalAlignment="Left" VerticalAlignment="Top"
+                 HorizontalAlignment="Center" VerticalAlignment="Center"
                  DataContext="{Binding SelectedGame}"
                  Visibility="{Binding Converter={StaticResource NullToCollapsed}}">
             <StackPanel Orientation="Horizontal">
-                <controls:CoverArt x:Name="PreviewCover" Width="300" Height="425" DecodeWidth="400"
-                                   ImagePath="{Binding CoverPath}" Title="{Binding Title}" Platform="{Binding PlatformLabel}"
-                                   AllowDrop="True" DragOver="OnCoverDragOver" Drop="OnCoverDrop"
-                                   MouseRightButtonUp="OnCoverRightClick"
-                                   ToolTip="Drop an image here, press Y, or right-click to set custom cover art" />
-                <StackPanel Width="300" Margin="32,6,0,0">
-                    <TextBlock Text="{Binding Title}" FontSize="30" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Details}" FontSize="15" Opacity="0.75" Margin="0,8,0,0" TextWrapping="Wrap" />
+                <StackPanel>
+                    <controls:CoverArt x:Name="PreviewCover" Width="600" Height="850" DecodeWidth="400"
+                                       ImagePath="{Binding CoverPath}" Title="{Binding Title}" Platform="{Binding PlatformLabel}"
+                                       AllowDrop="True" DragOver="OnCoverDragOver" Drop="OnCoverDrop"
+                                       MouseRightButtonUp="OnCoverRightClick"
+                                       ToolTip="Drop an image here, press Y, or right-click to set custom cover art" />
+
+                    <!-- Mirror of the cover's bottom 20 % (170 of 850 px), flipped inside the brush and fading out.
+                         Static brush: re-rendered only when the cover changes. -->
+                    <Rectangle Width="600" Height="170" Margin="0,6,0,0" IsHitTestVisible="False">
+                        <Rectangle.Fill>
+                            <VisualBrush Visual="{Binding ElementName=PreviewCover}" Stretch="Fill"
+                                         ViewboxUnits="RelativeToBoundingBox" Viewbox="0,0.8,1,0.2">
+                                <VisualBrush.RelativeTransform>
+                                    <ScaleTransform ScaleY="-1" CenterY="0.5" />
+                                </VisualBrush.RelativeTransform>
+                            </VisualBrush>
+                        </Rectangle.Fill>
+                        <Rectangle.OpacityMask>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                                <GradientStop Color="#55000000" Offset="0" />
+                                <GradientStop Color="#00000000" Offset="1" />
+                            </LinearGradientBrush>
+                        </Rectangle.OpacityMask>
+                    </Rectangle>
+                </StackPanel>
+
+                <StackPanel Width="380" Margin="44,0,0,176" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Title}" FontSize="40" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Details}" FontSize="19" Opacity="0.75" Margin="0,10,0,0" TextWrapping="Wrap" />
                     <Button Content="play" Style="{StaticResource PillButton}" HorizontalAlignment="Left"
-                            Margin="0,26,0,0" Click="OnLaunchClick" />
+                            FontSize="32" Padding="72,18" Margin="0,36,0,0" Click="OnLaunchClick" />
                 </StackPanel>
             </StackPanel>
         </Viewbox>

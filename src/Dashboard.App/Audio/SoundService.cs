@@ -55,6 +55,7 @@ public sealed class SoundService
                 Log.Warn($"Could not load sound {path}", ex);
             }
         }
+        Log.Info($"Sounds: {_players.Count} of {FileNames.Count} cues loaded from {_directory}");
     });
 
     public void Play(SoundCue cue)

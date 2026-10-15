@@ -22,9 +22,14 @@
         </StackPanel>
 
         <!-- Active session -->
-        <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left" VerticalAlignment="Top"
+        <!-- Centred in the blade at 1.5x; the Viewbox only scales down, so small windows still fit. -->
+        <Viewbox Grid.Row="1" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Center" VerticalAlignment="Center"
+                 Margin="0,0,0,40"
                  Visibility="{Binding HasSession, Converter={StaticResource BoolToVis}}">
-            <StackPanel Orientation="Horizontal">
+            <StackPanel Orientation="Horizontal" Margin="54">
+                <StackPanel.LayoutTransform>
+                    <ScaleTransform ScaleX="1.5" ScaleY="1.5" />
+                </StackPanel.LayoutTransform>
                 <!-- Glossy album frame over a blurred ambient copy of the art -->
                 <Grid Width="380" Height="380">
                     <Rectangle Margin="-36" Opacity="0.6" RadiusX="40" RadiusY="40" IsHitTestVisible="False">
@@ -57,7 +62,7 @@
                     </Border>
                 </Grid>
 
-                <StackPanel Width="440" Margin="44,10,0,0">
+                <StackPanel Width="440" Margin="44,0,0,0" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Title}" FontSize="36" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding Artist}" FontSize="22" Opacity="0.9" Margin="0,6,0,0" TextWrapping="Wrap" />
                     <TextBlock Text="{Binding Album}" FontSize="17" Opacity="0.7" Margin="0,4,0,0" TextWrapping="Wrap" />

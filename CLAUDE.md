@@ -20,7 +20,9 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
 - **Phase 4 done.** `Services/SmtcMediaService` over WinRT `GlobalSystemMediaTransportControlsSessionManager`
   (events only, no polling), registered in `App.xaml.cs`; `NullMediaService` removed. Keep the thumbnail `byte[]` reference
   stable for an unchanged track: `MediaViewModel` re-decodes only when the reference changes.
-- **Phase 5 next:** polish: settings persistence (sound, windowed mode, SteamGridDB key UI), focus animations, sound assets.
+- **Phase 5 in progress.** Done: hover-to-focus game list, 600x850 centred preview with VisualBrush reflection, bigger play pill,
+  Media blade centred at 1.5x, synthesised UI sounds (`tools/generate_sounds.py` → `Assets/Sounds`).
+  Left: settings persistence (sound, windowed mode, SteamGridDB key UI), focus animations.
 
 ## Cover conventions
 - Scanners never set `CoverArtPath`. They put art hints in `Metadata` using `GameMetadataKeys`

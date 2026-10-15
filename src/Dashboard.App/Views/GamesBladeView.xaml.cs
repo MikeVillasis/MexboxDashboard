@@ -56,6 +56,23 @@ public partial class GamesBladeView : UserControl, IBladeView
         ViewModel?.MoveSelection(delta);
     }
 
+    private Point? _lastPointer;
+
+    /// <summary>
+    /// Focus follows the mouse: the game under the pointer becomes the previewed game. Only real pointer movement counts;
+    /// WPF also raises MouseMove when wheel-scrolling slides items under a still pointer, and those are ignored.
+    /// </summary>
+    private void OnListMouseMove(object sender, MouseEventArgs e)
+    {
+        var position = e.GetPosition(this);
+        if (_lastPointer is { } last && Math.Abs(last.X - position.X) < 1 && Math.Abs(last.Y - position.Y) < 1) return;
+        _lastPointer = position;
+
+        if (e.OriginalSource is not DependencyObject source) return;
+        if (ItemsControl.ContainerFromElement(GameList, source) is ListBoxItem { DataContext: GameItemViewModel game })
+            ViewModel?.FocusGame(game);
+    }
+
     private void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (GameList.SelectedItem is { } item) GameList.ScrollIntoView(item);

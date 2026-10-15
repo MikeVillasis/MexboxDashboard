@@ -147,6 +147,14 @@ public sealed class GamesBladeViewModel : ObservableObject
         SelectedGame = Games[next];
     }
 
+    /// <summary>Pointer hover: focuses <paramref name="game"/> with the same tick as keyboard navigation.</summary>
+    public void FocusGame(GameItemViewModel game)
+    {
+        if (ReferenceEquals(SelectedGame, game)) return;
+        SelectedGame = game;
+        _sounds.Play(SoundCue.Navigate);
+    }
+
     public async Task LaunchSelectedAsync()
     {
         var game = SelectedGame;
