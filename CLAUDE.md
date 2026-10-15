@@ -37,3 +37,17 @@ C# / .NET 8 / WPF (`net8.0-windows10.0.19041.0`). Full architecture, controls an
 - WPF project has no implicit `System.IO` using — add `using System.IO;` explicitly (avoid `System.Windows.Shapes` clash on `Path`).
 - Scanner contract: return normally = complete installed set; throw = failed scan (cache kept).
 - Lowercase UI copy, Segoe UI Semibold, blade palette in `Themes/Palette.xaml`.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live as local markdown files under `.scratch/<feature>/` (no git remote). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
