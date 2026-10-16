@@ -4,3 +4,10 @@ obj/
 *.user
 *.suo
 publish/
+
+# Claude Code local data and temporary files
+.claude/settings.local.json
+.claude/sessions/
+.claude/todos/
+.claude/scheduled_tasks.*
+CLAUDE.md
