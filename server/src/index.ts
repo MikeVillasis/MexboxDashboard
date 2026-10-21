@@ -3,8 +3,21 @@ import { allowedOrigins, type Env } from "./env";
 import { HttpError, json, readJson } from "./http";
 import { exchangeCode } from "./oauth";
 
+/** Discord's documented prefix for proxied requests; accepted so the Activity works whether or not the proxy strips it. */
+const PROXY_PREFIX = "/.proxy";
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    if (url.pathname === PROXY_PREFIX || url.pathname.startsWith(`${PROXY_PREFIX}/`)) {
+      url.pathname = url.pathname.slice(PROXY_PREFIX.length) || "/";
+    }
+
+    // Everything outside /api is the Activity's static front end (public code, no data).
+    if (url.pathname !== "/api" && !url.pathname.startsWith("/api/")) {
+      return env.ASSETS.fetch(new Request(url, request));
+    }
+
     const origin = request.headers.get("origin");
     // Browsers always send Origin on cross-origin and POST requests; a foreign page is refused outright.
     if (origin && !allowedOrigins(env).has(origin)) return json({ error: "origin_not_allowed" }, 403);
@@ -20,7 +33,7 @@ export default {
     }
 
     try {
-      const response = await route(request, env);
+      const response = await route(url.pathname, request, env);
       for (const [k, v] of Object.entries(cors)) response.headers.set(k, v);
       return response;
     } catch (err) {
@@ -31,9 +44,7 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function route(request: Request, env: Env): Promise<Response> {
-  const { pathname } = new URL(request.url);
-
+async function route(pathname: string, request: Request, env: Env): Promise<Response> {
   if (pathname === "/api/token" && request.method === "POST") {
     const body = await readJson<{ code?: unknown; guildId?: unknown }>(request);
     return json(await exchangeCode(env, body.code, body.guildId));

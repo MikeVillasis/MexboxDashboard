@@ -4,8 +4,27 @@
     {
       "name": "web-stub",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["tools/web-stub/serve.py", "8360"],
+      "runtimeArgs": [
+        "tools/web-stub/serve.py",
+        "8360"
+      ],
       "port": 8360
+    },
+    {
+      "name": "activity-local",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "--prefix",
+        "server",
+        "wrangler",
+        "dev",
+        "--config",
+        "server/wrangler.toml",
+        "--port",
+        "8787",
+        "--local"
+      ],
+      "port": 8787
     }
   ]
 }

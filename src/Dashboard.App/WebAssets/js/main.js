@@ -5,7 +5,7 @@ import { RESIDENTS } from "./avatar/residents.js";
 import { NetworkManager } from "./net/NetworkManager.js";
 
 const backend = Xbox.backend;
-const dashboard = new Dashboard(backend);
+const dashboard = new Dashboard(backend, { blades: Xbox.blades });
 const report = (event, avatar, other) => Xbox.send("PLAZA_EVENT", { event, id: avatar?.id, with: other?.id ?? null });
 const plaza = new Plaza(document.getElementById("viewport-3d"), {
   // A floor click sends your avatar walking there (and tells your friends, so theirs walks too).

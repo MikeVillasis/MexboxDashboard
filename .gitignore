@@ -14,5 +14,10 @@ CLAUDE.md
 
 # Cloudflare Worker (server/)
 server/node_modules/
+.wrangler/
 server/.wrangler/
 server/.dev.vars
+
+# Discord Activity client (activity/)
+activity/node_modules/
+activity/dist/

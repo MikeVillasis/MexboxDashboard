@@ -1,0 +1,15 @@
+/* Activity-only additions on top of WebAssets/css/shell.css. */
+
+#activity-blocker {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(8, 12, 8, 0.86);
+  color: #e8f5e8;
+  font: 600 18px/1.4 "Segoe UI Semibold", "Segoe UI", system-ui, sans-serif;
+  text-align: center;
+  text-transform: lowercase;
+}

@@ -24,10 +24,15 @@ const PAGE = 8;
 const $ = (id) => document.getElementById(id);
 
 export class Dashboard extends EventTarget {
-  constructor(backend) {
+  /// options.blades: names the host supports (null = all). Others stay in the DOM, hidden, so their elements still resolve.
+  constructor(backend, options = {}) {
     super();
     this.backend = backend;
-    this.blades = [...document.querySelectorAll(".blade")];
+    this.blades = [...document.querySelectorAll(".blade")].filter((blade) => {
+      const keep = !options.blades || options.blades.includes(blade.dataset.blade);
+      if (!keep) blade.style.display = "none";
+      return keep;
+    });
     this.selected = 0;
     this.games = [];
     this.gameIndex = 0;

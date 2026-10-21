@@ -8,7 +8,8 @@
 //   webview2  the Windows app: C# XboxHostBridge (AddHostObjectToScript "xboxBackend"), envelopes via
 //             PostWebMessageAsJson / WebMessageDispatcher. Picked automatically when window.chrome.webview exists.
 //   adapter   any other host (Discord Activity, browser stub) sets window.XboxHostAdapter before this script runs:
-//             { name, backend, post(envelope), listen(fn(envelope)) }
+//             { name, backend, post(envelope), listen(fn(envelope)), blades? }
+//             blades: names of the blades this host supports (omitted = all of them).
 //
 // BACKEND CONTRACT (method names match C# XboxHostBridge; a host may leave out what it can't do, callers use ?.):
 //   GetVersion GetLibraryJson GetSettingsJson GetProfileJson FocusGame(id) LaunchGame(id) Rescan
@@ -52,6 +53,7 @@
   window.Xbox = Object.freeze({
     isHosted: Boolean(host),
     host: host ? host.name : null,
+    blades: (host && host.blades) || null,
 
     backend: host ? host.backend : null,
 

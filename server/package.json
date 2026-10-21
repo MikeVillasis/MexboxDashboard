@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "build:activity": "npm --prefix ../activity run build",
+    "deploy": "npm run build:activity && wrangler deploy",
     "migrate:local": "wrangler d1 migrations apply mexbox --local",
     "migrate:remote": "wrangler d1 migrations apply mexbox --remote",
     "typecheck": "tsc --noEmit",

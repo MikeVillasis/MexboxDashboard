@@ -22,14 +22,15 @@ on their gamercard, and they can launch their own games from the Activity.
    `NetworkManager.js` and DNA validation from `Core/Avatars/AvatarDna` move to the server.
 4. **Remote launch is only to yourself.** A launch request may target only the requester's own paired device and
    only a game id present in that device's last published library. The desktop app confirms with a toast.
-5. **Free tier only.** Cloudflare Workers, Durable Objects (WebSocket hibernation), D1, Pages. No paid add-ons.
+5. **Free tier only.** Cloudflare Workers (+ static assets), Durable Objects (WebSocket hibernation), D1. No paid add-ons.
 
 ## Architecture
 ```
 Discord client (iframe, *.discordsays.com proxy)
-  └─ activity/  (Vite build of shared WebAssets/js + Discord bridge.js)
-        │  /api  →  URL mapping → Worker
-        │  /ws   →  URL mapping → Worker → Durable Object "Room" (one per Activity instance id)
+  └─ one URL mapping "/" → mexbox-activity.<subdomain>.workers.dev
+        │  static front end: activity/dist (esbuild bundle of shared WebAssets + discord-host.js), Workers static assets
+        │  /api  → Worker
+        │  /ws   → Worker → Durable Object "Room" (one per Activity instance id)
 server/ (Cloudflare Worker, TypeScript)
   ├─ POST /api/token        OAuth code → access token (client secret lives only here)
   ├─ Room DO                 JOIN_SYNC / MOVE / EMOTE / DNA_UPDATE, authoritative, hibernating
@@ -41,7 +42,7 @@ Windows app (Dashboard.App)
 ```
 
 ## Repo layout (new)
-- `activity/` front-end host: Vite config, Discord `bridge.js`, SDK setup, mobile-friendly tweaks.
+- `activity/` front-end host: `build.mjs` (esbuild), `src/discord-host.js` adapter (SDK sign-in), mobile tweaks.
 - `server/` Worker + DOs + D1 migrations, `wrangler.toml`. Secrets via `wrangler secret`.
 - `src/Dashboard.App/Services/ActivityBridgeService.cs` + settings toggle. Nothing in `Core` touches the network
   beyond a plain DTO for the library summary.
@@ -58,7 +59,7 @@ Windows app (Dashboard.App)
 9. Docs: README/CLAUDE.md status, setup guide (Discord portal, wrangler, secrets), merge to `main`.
 
 ## Costs
-- Cloudflare: $0 within free tiers (Workers 100k req/day, DO free tier with hibernation, D1 free tier, Pages).
+- Cloudflare: $0 within free tiers (Workers 100k req/day, static asset requests free, DO free tier with hibernation, D1 free tier).
 - Discord: $0. SDK, API and Activities have no fees; only rate limits.
 - Optional: a custom domain (~$10/yr). Not needed; Discord proxies a `workers.dev`/`pages.dev` origin.
 
@@ -69,6 +70,9 @@ Windows app (Dashboard.App)
 - **No controller support** in the Activity. Mouse/touch/keyboard only.
 - **Windows PC unavailable for now:** do the Discord-side work first (01 JS-only, 02-05, server halves of 06-08).
   Desktop pieces wait; anything touching `Dashboard.App` is unverified until it's tested on Windows.
+
+- **Front end served by the Worker** (Workers static assets) instead of Pages: one origin, one Discord URL mapping,
+  one deploy. Decided in phase 03.
 
 ## Security
 Threat model: keep server data (members, avatars, libraries) inside the allowed guild; never leak secrets or tokens.

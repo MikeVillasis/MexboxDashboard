@@ -132,7 +132,33 @@ describe("origin and auth", () => {
     expect(res.status).toBe(401);
   });
 
-  it("answers unknown paths with 404", async () => {
-    expect((await call("/nope")).status).toBe(404);
+  it("answers unknown API paths with 404", async () => {
+    expect((await call("/api/nope")).status).toBe(404);
+  });
+});
+
+describe("Discord proxy and static front end", () => {
+  it("accepts API calls with the /.proxy prefix", async () => {
+    mockDiscord();
+    expect(await (await call("/.proxy/api/health")).json()).toEqual({ ok: true });
+    const res = await post("/.proxy/api/token", { code: "goodcode123", guildId: GUILD });
+    expect(res.status).toBe(200);
+  });
+
+  it("serves the Activity page from / and /.proxy/", async () => {
+    for (const path of ["/", "/.proxy/"]) {
+      const res = await call(path);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('<script src="discord-host.js"></script>');
+      expect(html).not.toContain("importmap");
+    }
+  });
+
+  it("serves static files to any origin but keeps the API origin-locked", async () => {
+    const asset = await call("/app.js", { headers: { origin: "https://elsewhere.example" } });
+    expect(asset.status).toBe(200);
+    const api = await call("/api/health", { headers: { origin: "https://elsewhere.example" } });
+    expect(api.status).toBe(403);
   });
 });

@@ -4,6 +4,13 @@ compatibility_date = "2025-09-01"
 workers_dev = true
 preview_urls = false   # no per-version public URLs; only the deployed version is reachable
 
+# The Activity front end (built by ../activity, `npm run deploy` builds it first) is served from this same origin,
+# so Discord needs a single URL mapping. API paths, with or without Discord's /.proxy prefix, reach the Worker.
+[assets]
+directory = "../activity/dist"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/.proxy/*"]
+
 [vars]
 # Public values only. DISCORD_CLIENT_ID = the Application ID from the Discord developer portal (public by design).
 DISCORD_CLIENT_ID = "1562463240532004874"
