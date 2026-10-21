@@ -1,5 +1,4 @@
-// Zero-cost P2P: PeerJS's free public broker only introduces peers (signalling); avatar traffic then flows directly
-// over WebRTC data channels (Google's public STUN server for NAT traversal). No game server, no storage service.
+// Plaza networking, independent of how packets travel (see PeerTransport.js for the transport contract).
 //
 // Event-driven, low bandwidth: packets are sent only when something changes, never per-frame transforms.
 //   JOIN_SYNC   { type, dna, x, z }   on connect: who I am and where I stand
@@ -7,74 +6,60 @@
 //   EMOTE       { type, emote }       wave | laugh | nod
 //   DNA_UPDATE  { type, dna }         I changed my look
 //
-// Peers are identified by the connection they arrive on (their friend code), never by ids inside packets, so one
+// Peers are identified by the channel they arrive on (their friend code), never by ids inside packets, so one
 // peer cannot speak for another. Every packet is size/shape checked and rate limited before it reaches the plaza;
-// recipes are additionally validated by C# (RememberFriend) before they are rendered or cached.
+// recipes are additionally validated by the host (RememberFriend) before they are rendered or cached.
 
-const PEER_PREFIX = "xbox360dash-v1-";
+import { PeerTransport } from "./PeerTransport.js";
+
 const MAX_PACKET_BYTES = 2048;
 const MAX_PACKETS_PER_SECOND = 20;
 const PLAZA_LIMIT = 9;
 const EMOTES = new Set(["wave", "laugh", "nod"]);
-const ICE = { iceServers: [{ urls: "stun:stun.l.google.com:19302" }] };
+const CODE = /^[A-HJ-NP-Z2-9]{6}$/;
 
 export class NetworkManager extends EventTarget {
-  constructor(friendCode, log) {
+  constructor(friendCode, log, transport = new PeerTransport(friendCode)) {
     super();
     this.code = friendCode;
-    this.log = log;                 // (event, peer, detail) → C# dashboard.log
-    this.connections = new Map();   // code → DataConnection
+    this.log = log;                 // (event, peer, detail) → host log
+    this.transport = transport;
+    this.peers = new Set();         // codes with an open channel
     this.rates = new Map();         // code → { windowStart, count }
-    this.peer = null;
     this.status = "offline";
   }
 
-  /// Registers this player on the broker under their friend code.
   start() {
-    if (typeof Peer === "undefined") { this.setStatus("unavailable"); return; }
-    this.peer = new Peer(PEER_PREFIX + this.code, { config: ICE, debug: 0 });
-    this.peer.on("open", () => { this.setStatus("online"); this.log("online", this.code); });
-    this.peer.on("connection", (conn) => this.attach(conn));
-    this.peer.on("disconnected", () => { this.setStatus("reconnecting"); setTimeout(() => this.peer && !this.peer.destroyed && this.peer.reconnect(), 3000); });
-    this.peer.on("error", (err) => {
-      this.log("error", err.type ?? "", String(err.message ?? err));
-      if (err.type === "peer-unavailable") this.dispatch("connectfailed", { code: String(err.message).split(PEER_PREFIX)[1]?.slice(0, 6) ?? "" });
+    this.transport.start({
+      status: (status) => this.setStatus(status),
+      log: this.log,
+      failed: (code) => this.dispatch("connectfailed", { code }),
+      open: (code) => {
+        if (!CODE.test(code) || this.peers.size >= PLAZA_LIMIT) { this.transport.disconnect(code); return; }
+        this.peers.add(code);
+        this.log("connected", code);
+        this.dispatch("peeropen", { code });
+      },
+      data: (code, data) => { if (this.peers.has(code)) this.receive(code, data); },
+      close: (code) => {
+        if (!this.peers.delete(code)) return;
+        this.log("disconnected", code);
+        this.dispatch("peerleave", { code });
+      },
     });
   }
 
   connect(code) {
     code = String(code).toUpperCase();
-    if (!this.peer || code === this.code || this.connections.has(code)) return;
-    this.log("connecting", code);
-    this.attach(this.peer.connect(PEER_PREFIX + code, { reliable: true, serialization: "json" }));
+    if (code !== this.code && !this.peers.has(code)) this.transport.connect(code);
   }
 
-  disconnect(code) { this.connections.get(code)?.close(); }
+  disconnect(code) { this.transport.disconnect(code); }
+
+  send(code, packet) { this.transport.send(code, packet); }
 
   /// Sends to every connected friend.
-  broadcast(packet) {
-    for (const conn of this.connections.values()) if (conn.open) conn.send(packet);
-  }
-
-  attach(conn) {
-    const code = conn.peer.startsWith(PEER_PREFIX) ? conn.peer.slice(PEER_PREFIX.length) : null;
-    if (!code || !/^[A-HJ-NP-Z2-9]{6}$/.test(code)) { conn.close(); return; }
-
-    conn.on("open", () => {
-      if (this.connections.size >= PLAZA_LIMIT) { conn.close(); return; }
-      this.connections.set(code, conn);
-      this.log("connected", code);
-      this.dispatch("peeropen", { code, conn });
-    });
-    conn.on("data", (data) => this.receive(code, data));
-    conn.on("close", () => {
-      if (this.connections.get(code) !== conn) return;
-      this.connections.delete(code);
-      this.log("disconnected", code);
-      this.dispatch("peerleave", { code });
-    });
-    conn.on("error", (err) => this.log("connection-error", code, String(err?.message ?? err)));
-  }
+  broadcast(packet) { this.transport.broadcast(packet); }
 
   receive(code, data) {
     if (!this.allow(code)) return;

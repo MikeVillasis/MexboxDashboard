@@ -1,0 +1,24 @@
+name = "mexbox-activity"
+main = "src/index.ts"
+compatibility_date = "2025-09-01"
+workers_dev = true
+preview_urls = false   # no per-version public URLs; only the deployed version is reachable
+
+[vars]
+# Public values only. DISCORD_CLIENT_ID = the Application ID from the Discord developer portal (public by design).
+DISCORD_CLIENT_ID = "1562463240532004874"
+EXTRA_ORIGINS = ""         # comma-separated extra allowed Origins for local testing only; keep empty in production
+
+# Secrets (never in this file or the repo), set from this folder:
+#   npx wrangler secret put DISCORD_CLIENT_SECRET
+#   npx wrangler secret put ALLOWED_GUILD_IDS      (comma-separated server IDs; unset/empty = reject everyone)
+# Local dev reads them from server/.dev.vars (git-ignored).
+
+[[d1_databases]]
+binding = "DB"
+database_name = "mexbox"
+database_id = "530c1a92-19d3-49ff-b7f3-32bf528e31a2"   # from: npx wrangler d1 create mexbox
+migrations_dir = "migrations"
+
+[observability]
+enabled = true

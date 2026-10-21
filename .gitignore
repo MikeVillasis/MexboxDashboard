@@ -11,3 +11,8 @@ publish/
 .claude/todos/
 .claude/scheduled_tasks.*
 CLAUDE.md
+
+# Cloudflare Worker (server/)
+server/node_modules/
+server/.wrangler/
+server/.dev.vars

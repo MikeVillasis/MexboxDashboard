@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-stub",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["tools/web-stub/serve.py", "8360"],
+      "port": 8360
+    }
+  ]
+}

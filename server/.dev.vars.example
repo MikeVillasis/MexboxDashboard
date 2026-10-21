@@ -1,0 +1,2 @@
+DISCORD_CLIENT_SECRET=paste-from-discord-developer-portal
+ALLOWED_GUILD_IDS=your-server-id

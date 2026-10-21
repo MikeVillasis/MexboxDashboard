@@ -1,4 +1,4 @@
-// Entry point: wires the C# bridge to the 2D dashboard (layer 10) and the 3D plaza (layer 1).
+// Entry point: wires the host bridge (C# WebView2 or another adapter, see bridge.js) to the 2D dashboard (layer 10) and the 3D plaza (layer 1).
 import { Dashboard } from "./ui/dashboard.js";
 import { Plaza } from "./scene/plaza.js";
 import { RESIDENTS } from "./avatar/residents.js";
@@ -86,7 +86,7 @@ async function startNetwork(connectTo) {
   // Both sides introduce themselves as soon as the data channel opens.
   net.addEventListener("peeropen", ({ detail }) => {
     const me = plaza.local;
-    detail.conn.send({ type: "JOIN_SYNC", dna: dashboard.dna, x: me?.root.position.x ?? 0, z: me?.root.position.z ?? 0 });
+    net.send(detail.code, { type: "JOIN_SYNC", dna: dashboard.dna, x: me?.root.position.x ?? 0, z: me?.root.position.z ?? 0 });
   });
   net.addEventListener("join", async ({ detail }) => {
     const dna = await acceptRecipe(detail.code, detail.dna, { x: detail.x, z: detail.z });
