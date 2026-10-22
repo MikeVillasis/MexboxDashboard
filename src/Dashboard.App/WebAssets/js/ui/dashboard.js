@@ -5,7 +5,7 @@
 import { CATALOG, PALETTES } from "../avatar/AvatarBuilder.js";
 import { EYE_STYLE_NAMES, MOUTH_STYLE_NAMES } from "../avatar/FaceController.js";
 
-const TAB = 56;
+const TAB = 56; // default; the live value comes from the CSS --tab variable (narrower on phones)
 
 // Customiser rows: each edits one DNA field, either an index into a catalogue list or a colour from a palette.
 const AVATAR_OPTIONS = [
@@ -26,6 +26,7 @@ const $ = (id) => document.getElementById(id);
 export class Dashboard extends EventTarget {
   /// options.blades: names the host supports (null = all). Others stay in the DOM, hidden, so their elements still resolve.
   /// options.inputHints: "controller" (default) or "keyboard" footer.
+  /// options.manualFriends: false hides "add a friend" (hosts where everyone present is connected automatically).
   constructor(backend, options = {}) {
     super();
     this.backend = backend;
@@ -47,6 +48,7 @@ export class Dashboard extends EventTarget {
     this.focusedAvatarId = null; // friend/resident the camera is following (friends blade)
     const input = options.inputHints === "keyboard" ? "keyboard" : "controller";
     for (const footer of document.querySelectorAll(".hints[data-input]")) footer.hidden = footer.dataset.input !== input;
+    if (options.manualFriends === false) for (const el of document.querySelectorAll("[data-manual-friends]")) el.hidden = true;
 
     this.buildHeader();
     this.buildSystemMenu();
@@ -137,9 +139,10 @@ export class Dashboard extends EventTarget {
   layout(animate) {
     const width = $("blade-stack").clientWidth;
     const count = this.blades.length;
-    const bladeWidth = width - (count - 1) * TAB;
+    const tab = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--tab")) || TAB;
+    const bladeWidth = width - (count - 1) * tab;
     this.blades.forEach((blade, i) => {
-      const x = i <= this.selected ? i * TAB : width - (count - i) * TAB;
+      const x = i <= this.selected ? i * tab : width - (count - i) * tab;
       if (!animate) blade.style.transition = "none";
       blade.style.setProperty("--blade-width", `${bladeWidth}px`);
       blade.style.setProperty("--x", `${x}px`);
@@ -471,6 +474,20 @@ export class Dashboard extends EventTarget {
         this.focusAvatar(id === this.focusedAvatarId ? null : id);
       });
     }
+    // Touch: a clear horizontal swipe on the blades (panels, tabs, header) switches blades, like LB/RB. Vertical moves
+    // stay native panel scrolling (touch-action: pan-y), so only sideways swipes arrive here as pointer events.
+    let swipe = null;
+    const stack = $("blade-stack");
+    stack.addEventListener("pointerdown", (e) => { swipe = e.pointerType === "touch" ? { x: e.clientX, y: e.clientY, id: e.pointerId } : null; });
+    stack.addEventListener("pointercancel", () => { swipe = null; });
+    stack.addEventListener("pointerup", (e) => {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      const dx = e.clientX - swipe.x;
+      const dy = e.clientY - swipe.y;
+      swipe = null;
+      if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) this.selectBlade(this.selected + (dx < 0 ? 1 : -1));
+    });
+
     $("collapse-ui").addEventListener("click", () => this.setCollapsed(true));
     $("expand-ui").addEventListener("click", () => this.setCollapsed(false));
 

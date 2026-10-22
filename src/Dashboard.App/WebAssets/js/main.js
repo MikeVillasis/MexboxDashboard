@@ -5,7 +5,7 @@ import { RESIDENTS } from "./avatar/residents.js";
 import { NetworkManager } from "./net/NetworkManager.js";
 
 const backend = Xbox.backend;
-const dashboard = new Dashboard(backend, { blades: Xbox.blades, inputHints: Xbox.inputHints });
+const dashboard = new Dashboard(backend, { blades: Xbox.blades, inputHints: Xbox.inputHints, manualFriends: Xbox.manualFriends });
 const report = (event, avatar, other) => Xbox.send("PLAZA_EVENT", { event, id: avatar?.id, with: other?.id ?? null });
 const plaza = new Plaza(document.getElementById("viewport-3d"), {
   // A floor click sends your avatar walking there (and tells your friends, so theirs walks too).
@@ -14,7 +14,7 @@ const plaza = new Plaza(document.getElementById("viewport-3d"), {
   grab: (avatar) => { report("grab", avatar); backend?.PlaySound("Select"); },
   drop: (avatar) => { report("drop", avatar); backend?.PlaySound("Back"); },
   plazaEvent: report,
-});
+}, { quality: Xbox.quality });
 
 dashboard.addEventListener("bladechange", (e) => plaza.setBlade(e.detail.blade));
 dashboard.addEventListener("focusavatar", (e) => { if (!plaza.focusAvatar(e.detail.id) && e.detail.id) dashboard.toast("they haven't arrived in the plaza yet"); });
@@ -112,8 +112,7 @@ async function startNetwork(connectTo) {
   });
   // Gone offline: they keep wandering your plaza as an NPC (or nap there, if the host says away friends sleep).
   net.addEventListener("peerleave", ({ detail }) => {
-    const avatar = friendAvatar(detail.code);
-    if (avatar) { plaza.ai.setRemote(avatar, false); plaza.ai.setAsleep(avatar, Xbox.awayAsleep); }
+    plaza.setAway(`friend_${detail.code}`, Xbox.awayAsleep);
     const f = friends.get(detail.code);
     if (f) { f.online = false; renderFriends(); dashboard.toast(`${f.name} left`); }
   });

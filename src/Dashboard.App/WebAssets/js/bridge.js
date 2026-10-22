@@ -13,6 +13,8 @@
 //             createTransport(friendCode): a plaza transport (js/net/PeerTransport.js contract); omitted = PeerJS P2P.
 //             awayAsleep: friends who aren't connected nap in place instead of roaming as NPCs.
 //             inputHints: "keyboard" or "controller" (default) footer hints.
+//             manualFriends: false hides "add a friend" by code (everyone present is connected automatically).
+//             quality: plaza render tier, "high" (default) | "medium" | "low" | "auto" (see js/scene/Quality.js).
 //
 // BACKEND CONTRACT (method names match C# XboxHostBridge; a host may leave out what it can't do, callers use ?.):
 //   GetVersion GetLibraryJson GetSettingsJson GetProfileJson FocusGame(id) LaunchGame(id) Rescan
@@ -60,6 +62,8 @@
     createTransport: host && host.createTransport ? (code) => host.createTransport(code) : null,
     awayAsleep: Boolean(host && host.awayAsleep),
     inputHints: (host && host.inputHints) || "controller",
+    quality: (host && host.quality) || "high",
+    manualFriends: !(host && host.manualFriends === false),
 
     backend: host ? host.backend : null,
 

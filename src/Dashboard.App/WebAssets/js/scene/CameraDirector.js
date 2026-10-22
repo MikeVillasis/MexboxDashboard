@@ -7,6 +7,16 @@ import * as THREE from "three";
 // target sideways together so the subject sits right of the side panel.
 const FOLLOW = { position: [0, 2.3, 5.2], target: [0, 1.0, 0], fov: 40 };
 const FRAMING_X = -1.7;
+const DEG = Math.PI / 180;
+
+/// Shots are tuned for landscape. In portrait (phones) keep roughly the same horizontal coverage by widening the
+/// vertical field of view, capped so it never fish-eyes.
+function fitAspect(fov, aspect) {
+  if (aspect >= 1.2) return fov;
+  const horizontal = 2 * Math.atan(Math.tan((fov * DEG) / 2) * 1.6);
+  const vertical = (2 * Math.atan(Math.tan(horizontal / 2) / aspect)) / DEG;
+  return Math.min(78, fov + (vertical - fov) * 0.7);
+}
 
 // Shots are relative to the local avatar's position (it stands at the plaza centre).
 const SHOTS = {
@@ -28,7 +38,7 @@ export class CameraDirector {
     this.lookAt = new THREE.Vector3();
     this.fov = camera.fov;
     this.following = null;      // Object3D the camera tracks, or null for the blade shot
-    this.offsetX = FRAMING_X;   // 0 while the dashboard is collapsed
+    this.panelVisible = true;   // false while the dashboard is collapsed
     this.set("games", true);
   }
 
@@ -39,7 +49,11 @@ export class CameraDirector {
   }
 
   /// Whether the side panel covers the left of the screen (tracked subjects are framed to its right).
-  framing(panelVisible) { this.offsetX = panelVisible ? FRAMING_X : 0; }
+  /// On narrow screens the panel covers the whole blade, so subjects are centred either way.
+  framing(panelVisible) { this.panelVisible = panelVisible; }
+
+  /// Sideways shift for followed subjects: beside the panel on wide screens, centred on phones or with the UI hidden.
+  get offsetX() { return this.panelVisible && this.camera.aspect >= 1.2 ? FRAMING_X : 0; }
 
   set(shotName, immediate = false) {
     const shot = SHOTS[shotName] ?? SHOTS.games;
@@ -51,7 +65,7 @@ export class CameraDirector {
     if (immediate) {
       this.camera.position.copy(this.position);
       this.lookAt.copy(this.target);
-      this.camera.fov = this.fov;
+      this.camera.fov = fitAspect(this.fov, this.camera.aspect);
       this.camera.updateProjectionMatrix();
       this.camera.lookAt(this.lookAt);
     }
@@ -70,8 +84,9 @@ export class CameraDirector {
     this.camera.position.lerp(drift.add(this.position), k);
     this.lookAt.lerp(this.target, k);
     this.camera.lookAt(this.lookAt);
-    if (Math.abs(this.camera.fov - this.fov) > 0.01) {
-      this.camera.fov += (this.fov - this.camera.fov) * k;
+    const fov = fitAspect(this.fov, this.camera.aspect);
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov += (fov - this.camera.fov) * k;
       this.camera.updateProjectionMatrix();
     }
   }

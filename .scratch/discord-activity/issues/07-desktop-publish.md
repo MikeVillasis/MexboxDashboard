@@ -7,3 +7,4 @@ Blocked by: 06
 - Gamercard in the Activity shows the linked user's games.
 - Library is visible to the whole guild, not just the instance.
 - Windows PC unavailable: build the server half now; the desktop half waits (Status stays ready-for-agent for server work only).
+- 2026-10-22: phone blade space follow-up filed as ticket 10 (with phase 07).

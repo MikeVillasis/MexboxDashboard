@@ -488,3 +488,51 @@ kbd {
   animation: fade-in 0.2s;
 }
 @keyframes fade-in { from { opacity: 0; } }
+
+/* ═══════════════ Touch and small screens (Discord mobile) ═══════════════ */
+/* The plaza handles its own drags and taps; the browser must not pan or zoom the page under them. Panels keep native
+   vertical scrolling, and horizontal swipes on the blades reach the dashboard (blade switching). */
+#viewport-3d { touch-action: none; }
+.side-panel { touch-action: pan-y; }
+
+@media (pointer: coarse) {
+  .hints { display: none; }                         /* keys and controller buttons mean nothing on a touch screen */
+  .blade-stack { bottom: 10px; }
+  .option-list .step { width: 40px; height: 40px; font-size: 15px; }
+  .plain-list.selectable li:not(.subtitle) { padding: 10px; }
+  .toast { bottom: 24px; }
+}
+
+@media (max-width: 760px), (max-height: 520px) {
+  :root { --tab: 38px; }
+  .topbar { height: 52px; padding: 0 12px 6px; }
+  .blade-names { gap: 12px; }
+  .blade-names button { font-size: 15px; }
+  .blade-names button.active { font-size: 24px; }
+  .topbar-right { gap: 12px; }
+  .gamertag { font-size: 14px; }
+  .clock { font-size: 17px; }
+  .blade-stack { top: 52px; left: 6px; right: 6px; }
+  .blade-tab span { font-size: 16px; top: 18px; }
+  .blade-body { padding: 14px 12px; border-radius: 0 12px 12px 0; }
+  .blade-header h1 { font-size: 24px; }
+  .blade-header .subtitle { display: none; }      /* the header row is for the title and its button */
+  .add-friend { display: flex; gap: 8px; }
+  .add-friend input { flex: 1; min-width: 0; }
+  .side-panel { top: 72px; left: 8px; right: 8px; bottom: 8px; width: auto; padding: 12px 14px; }
+  .side-panel h3 { font-size: 16px; margin-bottom: 6px; }
+  .plain-list { font-size: 15px; margin-bottom: 12px; }
+  .option-list li { height: 48px; }
+  .option-list .label { font-size: 15px; }
+  .option-list .value span { min-width: 72px; font-size: 14px; }
+  .collapse-toggle { top: 14px; left: auto; right: 12px; font-size: 14px; padding: 5px 14px; }
+  .gamercard-card { min-width: 0; width: calc(100vw - 32px); padding: 18px; gap: 14px; }
+  .gamercard-picture { width: 84px; height: 84px; }
+  .gamercard h2 { font-size: 24px; }
+  .toast { max-width: calc(100vw - 32px); }
+}
+
+/* Short landscape phones: the panel header and list rows need every pixel. */
+@media (max-height: 520px) {
+  .side-panel { top: 50px; }
+}

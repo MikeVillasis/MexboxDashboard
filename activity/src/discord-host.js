@@ -163,6 +163,9 @@ window.XboxHostAdapter = {
   backend,
   awayAsleep: true,
   inputHints: "keyboard",
+  manualFriends: false, // everyone in the Activity is in the room already; codes only identify people
+  // Discord passes ?platform=mobile|desktop in the Activity URL: phones start on the light tier, desktops adapt.
+  quality: new URLSearchParams(location.search).get("platform") === "mobile" ? "low" : "auto",
   /** Called by main.js after HOST_READY (so sign-in is done): the shared room for this Activity instance. */
   createTransport() {
     const s = current;
