@@ -4,6 +4,7 @@ import { HttpError, isSnowflake, json, readJson } from "./http";
 import { exchangeCode } from "./oauth";
 import { getAvatar, getMembers, putAvatar } from "./plaza";
 
+export { PresenceHub } from "./presence-hub";
 export { PlazaRoom } from "./room";
 
 /** Discord's documented prefix for proxied requests; accepted so the Activity works whether or not the proxy strips it. */
@@ -76,11 +77,14 @@ async function route(pathname: string, request: Request, env: Env): Promise<Resp
     const headers = new Headers(request.headers);
     headers.set("x-guild-id", guildId);
     headers.set("x-client-ip", clientIp(request));
+    headers.set("x-room-name", `${guildId}:${instanceId}`);
     const room = env.ROOMS.get(env.ROOMS.idFromName(`${guildId}:${instanceId}`));
     return room.fetch(new Request(request.url, { headers }));
   }
 
   if (pathname === "/api/health") return json({ ok: true });
+  // Temporary: thought-bubble troubleshooting (counts and error codes only).
+  if (pathname === "/api/presence/health") return json(await env.PRESENCE.get(env.PRESENCE.idFromName("hub")).health());
 
   throw new HttpError(404, "not_found");
 }

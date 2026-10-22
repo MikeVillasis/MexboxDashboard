@@ -85,6 +85,7 @@ export class Avatar {
     this.motion = { walk: 0, walkPhase: 0, gesture: null, gestureTime: 0, dangle: 0, sleep: 0 };
     this.asleep = false;
     this.snore = null; // floating "z z" sprite, created on first nap
+    this.thought = null; // thought bubble sprite (what they're playing / listening to), null when there's nothing
   }
 
   get id() { return this.dna?.id; }
@@ -142,6 +143,25 @@ export class Avatar {
     }
   }
 
+  /// Thought bubble from the host's presence feed: { kind: "playing" | "listening" | "watching", text } or null.
+  /// Drawn at a constant on-screen size so it stays readable in the wide plaza shot.
+  setThought(status) {
+    if (this.thought) {
+      this.root.remove(this.thought);
+      this.thought.material.map.dispose();
+      this.thought.material.dispose();
+      this.thought = null;
+    }
+    if (!status?.text) return;
+    const { texture, aspect } = thoughtTexture(status);
+    const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, sizeAttenuation: false });
+    this.thought = new THREE.Sprite(material);
+    this.thought.center.set(0.18, 0); // the tail (bottom-left) sits over the head
+    this.thought.scale.set(0.09 * aspect, 0.09, 1);
+    this.thought.renderOrder = 10;
+    this.root.add(this.thought);
+  }
+
   /// Plays a gesture ("wave" | "laugh" | "nod") once; the face reacts to match.
   gesture(name) {
     this.onGesture?.(name); // the local avatar's gestures are broadcast to peers
@@ -161,6 +181,8 @@ export class Avatar {
       if (m.gestureTime > GESTURE_SECONDS[m.gesture]) m.gesture = null;
     }
     m.sleep = this.asleep ? Math.min(1, m.sleep + dt * 0.8) : Math.max(0, m.sleep - dt * 2);
+    // Bubble over the head; it settles lower while napping, beside the "z z".
+    if (this.thought) this.thought.position.set(0.12, 2.0 - m.sleep * 0.5 + Math.sin(this.time * 1.2) * 0.02, 0);
     if (this.snore) {
       this.snore.material.opacity = Math.max(0, m.sleep - 0.5) * 2 * (0.65 + Math.sin(this.time * 1.6) * 0.35);
       this.snore.position.set(0.18, 1.32 + Math.sin(this.time * 0.8) * 0.05, 0.05);
@@ -175,6 +197,7 @@ export class Avatar {
     for (const m of Object.values(this.materials)) m.dispose();
     this.faceTextures.eyes.dispose();
     this.faceTextures.mouth.dispose();
+    this.setThought(null);
   }
 }
 
@@ -341,6 +364,54 @@ class ProceduralKit {
       b.foreArm_R.rotation.x = lerp(b.foreArm_R.rotation.x, -0.6, s);
     }
   }
+}
+
+const THOUGHT_ICON = { playing: "\u{1F3AE}", listening: "\u{1F3B5}", watching: "\u{1F4FA}" };
+
+/// A cloud-shaped thought bubble with trailing puffs, an icon and one line of text (lowercase UI copy for the verb,
+/// the game/song as Discord reports it).
+function thoughtTexture({ kind, text }) {
+  const scale = 2; // drawn at 2x for crisp text
+  const font = `600 ${22 * scale}px 'Segoe UI', system-ui, sans-serif`;
+  const measure = document.createElement("canvas").getContext("2d");
+  measure.font = font;
+  const label = `${THOUGHT_ICON[kind] ?? ""} ${text}`;
+  const textWidth = Math.min(measure.measureText(label).width, 360 * scale);
+  const pad = 18 * scale;
+  const bubbleW = textWidth + pad * 2;
+  const bubbleH = 46 * scale;
+  const tail = 30 * scale; // room below the bubble for the trailing puffs
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(bubbleW + 8 * scale);
+  canvas.height = Math.ceil(bubbleH + tail + 8 * scale);
+  const ctx = canvas.getContext("2d");
+  const x0 = 4 * scale;
+  const y0 = 4 * scale;
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.94)";
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.35)";
+  ctx.lineWidth = 2 * scale;
+  ctx.beginPath();
+  ctx.roundRect(x0, y0, bubbleW, bubbleH, bubbleH / 2);
+  ctx.fill();
+  ctx.stroke();
+  for (const [cx, cy, r] of [[0.2, 1.22, 7], [0.13, 1.5, 4.5]]) { // puffs trailing down towards the head
+    ctx.beginPath();
+    ctx.arc(x0 + bubbleW * cx, y0 + bubbleH * cy, r * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+
+  ctx.font = font;
+  ctx.fillStyle = "#1d1d1d";
+  ctx.textBaseline = "middle";
+  let shown = label;
+  while (ctx.measureText(shown).width > textWidth && shown.length > 4) shown = `${shown.slice(0, -2)}…`;
+  ctx.fillText(shown, x0 + pad, y0 + bubbleH / 2 + scale);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return { texture, aspect: canvas.width / canvas.height };
 }
 
 /// Shared "z z" texture for napping avatars (drawn once).

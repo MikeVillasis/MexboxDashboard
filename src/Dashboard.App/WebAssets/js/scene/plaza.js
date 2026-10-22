@@ -31,6 +31,7 @@ export class Plaza {
     this.local = null;
     this.spawning = new Map(); // id → Promise<Avatar> while a friend's avatar is being built
     this.roles = new Map();    // id → latest requested { live, asleep, x, z } for a friend
+    this.thoughts = new Map(); // id → thought bubble status (applied when the avatar exists or appears)
 
     this.tier = TIERS[quality] ? quality : "high";
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: this.tier !== "low", powerPreference: "high-performance" });
@@ -138,6 +139,7 @@ export class Plaza {
     this.avatars.set(dna.id, this.local);
     this.ai.add(this.local);
     this.ai.setAnchored(this.local, this.blade === "avatar");
+    this.local.setThought(this.thoughts.get("local") ?? null);
     return this.local;
   }
 
@@ -177,7 +179,16 @@ export class Plaza {
     this.scene.add(avatar.root);
     this.avatars.set(dna.id, avatar);
     this.ai.add(avatar);
+    avatar.setThought(this.thoughts.get(dna.id) ?? null);
     return avatar;
+  }
+
+  /// What someone is playing / listening to (host presence feed); null clears the bubble. Kept for avatars that spawn
+  /// later (an away member's status can arrive before their napping avatar is built).
+  setThought(id, status) {
+    if (status) this.thoughts.set(id, status);
+    else this.thoughts.delete(id);
+    this.avatars.get(id)?.setThought(status ?? null);
   }
 
   /// A friend went away (peer left): no longer driven by their peer; naps or roams as the host prefers.

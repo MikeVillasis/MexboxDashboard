@@ -1,8 +1,10 @@
-import { applyD1Migrations, env, type D1Migration } from "cloudflare:test";
+import { applyD1Migrations, env, runInDurableObject, type D1Migration } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { friendCode } from "../../activity/src/identity.js";
 import { clearAuthCache } from "../src/auth";
 import { normaliseDna } from "../src/dna";
+import { statusFromPresence } from "../src/presence";
+import type { PresenceHub } from "../src/presence-hub";
 import type { Env } from "../src/env";
 import worker from "../src/index";
 
@@ -220,5 +222,63 @@ describe("plaza room", () => {
     await ben.next("EMOTE");
     await new Promise((r) => setTimeout(r, 200));
     expect(ben.count("EMOTE")).toBeLessThanOrEqual(20);
+  });
+});
+
+// ───────────── Thought bubbles (Discord presences) ─────────────
+
+describe("statuses from Discord presences", () => {
+  it("prefers games, then music (song – artist), then watching; ignores custom statuses and offline", () => {
+    expect(statusFromPresence({ status: "online", activities: [{ type: 4, name: "Custom Status", state: "brb" }, { type: 0, name: "Halo Infinite" }] }))
+      .toEqual({ kind: "playing", text: "Halo Infinite" });
+    expect(statusFromPresence({ status: "online", activities: [{ type: 2, name: "Spotify", details: "Still Alive", state: "GLaDOS" }] }))
+      .toEqual({ kind: "listening", text: "Still Alive – GLaDOS" });
+    expect(statusFromPresence({ status: "dnd", activities: [{ type: 2, name: "Spotify", details: "Song" }, { type: 0, name: "Portal 2" }] }))
+      .toEqual({ kind: "playing", text: "Portal 2" });
+    expect(statusFromPresence({ status: "idle", activities: [{ type: 3, name: "YouTube", details: "a video" }] }))
+      .toEqual({ kind: "watching", text: "a video" });
+    expect(statusFromPresence({ status: "online", activities: [{ type: 4, state: "just vibing" }] })).toBeNull();
+    expect(statusFromPresence({ status: "offline", activities: [{ type: 0, name: "Halo" }] })).toBeNull();
+  });
+
+  it("cleans and clips text", () => {
+    const status = statusFromPresence({ status: "online", activities: [{ type: 0, name: `  ${"x".repeat(80)}\n\u0007 ` }] });
+    expect(status?.text.length).toBe(48);
+    expect(status?.text.endsWith("…")).toBe(true);
+  });
+});
+
+describe("thought bubbles in the room", () => {
+  const hub = () => testEnv.PRESENCE.get(testEnv.PRESENCE.idFromName("hub"));
+  const presence = (guild: string, user: string, activities: unknown[], status = "online") =>
+    runInDurableObject(hub(), (h: PresenceHub) => h.dispatch({ op: 0, t: "PRESENCE_UPDATE", d: { guild_id: guild, user: { id: user }, status, activities } }));
+  const BEN = USERS["token-ben"][0];
+  const benCode = friendCode(BEN);
+
+  it("pushes a member's activity to everyone in their server's rooms, present or away", async () => {
+    const ana = await join("b1", "token-ana");
+    await presence(GUILD, BEN, [{ type: 0, name: "Halo Infinite" }]); // Ben isn't even in the room: he's away
+    expect(await ana.next("STATUS")).toEqual({ type: "STATUS", code: benCode, status: { kind: "playing", text: "Halo Infinite" } });
+
+    await presence(GUILD, BEN, [{ type: 0, name: "Halo Infinite" }]); // unchanged: no duplicate push
+    await presence(GUILD, BEN, [], "offline");
+    expect(await ana.next("STATUS", (m) => m.status === null)).toEqual({ type: "STATUS", code: benCode, status: null });
+    expect(ana.count("STATUS")).toBe(2);
+  });
+
+  it("hands newcomers the current statuses in WELCOME", async () => {
+    await join("b2", "token-cy"); // someone in the room keeps the hub subscribed for this server
+    await presence(GUILD, BEN, [{ type: 2, name: "Spotify", details: "Still Alive", state: "GLaDOS" }]);
+    const ben = await join("b2", "token-ben");
+    expect((await ben.next("WELCOME")).statuses[benCode]).toEqual({ kind: "listening", text: "Still Alive – GLaDOS" });
+  });
+
+  it("never leaks presences from servers that aren't allowlisted", async () => {
+    const ana = await join("b3", "token-ana");
+    testEnv.ALLOWED_GUILD_IDS = GUILD; // OTHER_GUILD no longer allowed
+    await presence(OTHER_GUILD, BEN, [{ type: 0, name: "Secret Game" }]);
+    await presence(GUILD, USERS["token-cy"][0], [{ type: 0, name: "Tetris" }]);
+    await ana.next("STATUS", (m) => m.status?.text === "Tetris");
+    expect(ana.inbox.some((m) => m.status?.text === "Secret Game")).toBe(false);
   });
 });

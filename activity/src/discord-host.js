@@ -67,6 +67,8 @@ async function api(s, path, { method = "GET", body } = {}) {
 const call = (fn) => (...args) => session.then((s) => fn(s, ...args));
 
 const friends = new Map(); // code → recipe as last rendered (the room and the away list are the sources)
+const statuses = new Map(); // code → Discord presence for thought bubbles (from the room)
+const STATUS_VERB = { playing: "playing", listening: "listening to", watching: "watching" };
 
 const backend = {
   GetVersion: call(() => "activity"),
@@ -94,7 +96,10 @@ const backend = {
     const dna = JSON.parse(json);
     const local = dna.id === "local";
     emit("OPEN_GAMERCARD", { card: { gamertag: dna.name, color: dna.shirtColor, local,
-      stats: local ? { status: "in the plaza", "signed in as": s.member.displayName } : { status: "plaza resident", zone: "this server" } } });
+      stats: {
+        ...(local ? { status: "in the plaza", "signed in as": s.member.displayName } : { status: "plaza resident", zone: "this server" }),
+        ...cardStatus(local ? friendCode(s.member.discordId) : dna.id?.replace(/^friend_/, "")),
+      } } });
     return true;
   }),
 
@@ -118,6 +123,12 @@ const backend = {
   MediaNext: call(() => {}),
   MediaPrevious: call(() => {}),
 };
+
+/** Gamercard line for a member's current Discord activity, if any. */
+function cardStatus(code) {
+  const status = code && statuses.get(code);
+  return status ? { now: `${STATUS_VERB[status.kind] ?? ""} ${status.text}`.trim() } : {};
+}
 
 /** The Windows app plays these through C#; here they are the same WAVs through the page. */
 const sound = {
@@ -171,7 +182,13 @@ window.XboxHostAdapter = {
     const s = current;
     const params = new URLSearchParams({ guild: s.sdk.guildId ?? "", instance: s.sdk.instanceId });
     const scheme = location.protocol === "https:" ? "wss" : "ws";
-    return new RoomTransport({ url: `${scheme}://${location.host}${API}/room?${params}`, token: s.token, getDna: () => s.dna });
+    return new RoomTransport({
+      url: `${scheme}://${location.host}${API}/room?${params}`, token: s.token, getDna: () => s.dna,
+      onStatus: (code, status) => {
+        if (status) statuses.set(code, status); else statuses.delete(code);
+        emit("FRIEND_STATUS", { code, status });
+      },
+    });
   },
   post({ type, payload }) {
     const command = type === "KEY" ? mapKey(payload?.key, payload?.shift) : null;

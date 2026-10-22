@@ -76,6 +76,11 @@ Windows app (Dashboard.App)
   allowlisted server, and room contents (avatars, moves) are server-visible anyway. Instance ids only pick the room.
 - **Rate limit counts Discord calls, not API calls** (phase 04): 60/min per IP on token exchange and uncached sign-in
   checks; members may share Discord's proxy IP, and a launch makes several API calls but only ~2 Discord calls.
+- **Thought bubbles from Discord presence need a bot** (2026-10-22, owner chose this over waiting for phase 07):
+  `DISCORD_BOT_TOKEN` secret + Presence intent, reversing the phase 04 "no bot token" stance for this feature only.
+  The bot has no permissions and isn't used for room access. One Gateway connection (`PresenceHub` DO), connected only
+  while a room has people in it (2-minute grace after the last leaves); statuses in memory only; shown for present and
+  away members.
 - **Front end served by the Worker** (Workers static assets) instead of Pages: one origin, one Discord URL mapping,
   one deploy. Decided in phase 03.
 

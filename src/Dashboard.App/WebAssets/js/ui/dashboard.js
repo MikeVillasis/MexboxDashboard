@@ -21,6 +21,12 @@ const AVATAR_OPTIONS = [
   { key: "legsColor", label: "bottoms colour", palette: PALETTES.legs },
 ];
 const PAGE = 8;
+
+/// One line for a Discord presence in lists ("playing halo infinite"); the bubble over the avatar shows the same.
+function statusLine(status) {
+  const verb = { playing: "playing", listening: "listening to", watching: "watching" }[status.kind] ?? "";
+  return `${verb} ${status.text}`.trim();
+}
 const $ = (id) => document.getElementById(id);
 
 export class Dashboard extends EventTarget {
@@ -371,7 +377,7 @@ export class Dashboard extends EventTarget {
 
   setNetStatus(status) { $("net-status").textContent = status; }
 
-  /// friends: [{ code, name, online, color }]
+  /// friends: [{ code, name, online, color, status? }]
   setFriends(friends) {
     const list = $("friend-list");
     if (friends.length === 0) { list.innerHTML = `<li class="subtitle">no friends yet. share your code!</li>`; return; }
@@ -383,7 +389,7 @@ export class Dashboard extends EventTarget {
       li.querySelector(".dot").classList.toggle("online", f.online);
       li.querySelector(".swatch").style.background = f.color;
       li.querySelector("span").textContent = f.name;
-      li.querySelector("em").textContent = f.online ? "in your plaza" : f.code;
+      li.querySelector("em").textContent = f.status ? statusLine(f.status) : f.online ? "in your plaza" : f.code;
       return li;
     }));
   }

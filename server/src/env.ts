@@ -6,6 +6,12 @@ export interface Env {
   DISCORD_CALLS: RateLimit;
   /** One PlazaRoom Durable Object per Activity instance. */
   ROOMS: DurableObjectNamespace<import("./room").PlazaRoom>;
+  /** The single Discord Gateway connection for presences (thought bubbles). */
+  PRESENCE: DurableObjectNamespace<import("./presence-hub").PresenceHub>;
+  /** Secret; without it the hub never connects and nobody gets bubbles. */
+  DISCORD_BOT_TOKEN?: string;
+  /** Overridable for local dev / tests only. */
+  DISCORD_GATEWAY?: string;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   ALLOWED_GUILD_IDS?: string;

@@ -2,10 +2,14 @@
 // hibernation so an idle room costs nothing. Per-socket state lives in the socket attachment and survives hibernation.
 //
 // Client → room                          Room → client
-//   AUTH { token, dna, x, z }  (first)     WELCOME { you, peers: [{ code, dna, x, z }] }
+//   AUTH { token, dna, x, z }  (first)     WELCOME { you, peers: [{ code, dna, x, z }], statuses: { code: status } }
 //   MOVE { x, z }                          JOIN { code, dna, x, z } · LEAVE { code }
 //   EMOTE { emote }                        MOVE { code, x, z } · EMOTE { code, emote } · DNA { code, dna }
-//   DNA { dna }                            ERROR { error }  (then the socket closes)
+//   DNA { dna }                            STATUS { code, status|null }  (Discord "playing/listening", any member)
+//                                          ERROR { error }  (then the socket closes)
+//
+// Statuses come from the PresenceHub (presence-hub.ts): the room subscribes while anyone is in it and refreshes that
+// every couple of minutes from its alarm.
 //
 // Clients are identified by the socket they authenticated on, never by ids inside packets. Every packet is size, shape
 // and rate checked; recipes are normalised; positions clamped to the plaza.
@@ -16,16 +20,19 @@ import { verifyMember } from "./auth";
 import { normaliseDna, parseStoredDna, type AvatarDna } from "./dna";
 import type { Env } from "./env";
 import { HttpError } from "./http";
+import type { Status } from "./presence";
 
 const MAX_MESSAGE = 2048;
 const MAX_PER_SECOND = 20;
 const ROOM_LIMIT = 16;
 const AUTH_TIMEOUT_MS = 10_000;
 const EMOTES = new Set(["wave", "laugh", "nod"]);
+const HUB_TOUCH_MS = 2 * 60 * 1000;
 
 export const CLOSE = { auth: 4001, replaced: 4002, full: 4003, protocol: 4004, timeout: 4005 } as const;
 
 interface Seat {
+  room: string;
   guildId: string;
   ip: string;
   opened: number;
@@ -52,6 +59,7 @@ export class PlazaRoom extends DurableObject<Env> {
     const [client, server] = Object.values(pair);
     this.ctx.acceptWebSocket(server);
     const seat: Seat = {
+      room: request.headers.get("x-room-name") ?? "",
       guildId: request.headers.get("x-guild-id") ?? "",
       ip: request.headers.get("x-client-ip") ?? "unknown",
       opened: Date.now(),
@@ -139,7 +147,9 @@ export class PlazaRoom extends DurableObject<Env> {
     Object.assign(seat, { authed: true, discordId: member.discordId, code, dna, x: clamp(packet.x), z: clamp(packet.z) });
     ws.serializeAttachment(seat);
 
-    this.send(ws, { type: "WELCOME", you: code, peers: present.map(([, s]) => ({ code: s.code, dna: s.dna, x: s.x, z: s.z })) });
+    const statuses = await this.hub().subscribe(seat.room, seat.guildId).catch(() => ({}));
+    if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + HUB_TOUCH_MS);
+    this.send(ws, { type: "WELCOME", you: code, peers: present.map(([, s]) => ({ code: s.code, dna: s.dna, x: s.x, z: s.z })), statuses });
     const joined = { code, dna, x: seat.x, z: seat.z };
     this.broadcast(replacing ? { type: "DNA", code, dna } : { type: "JOIN", ...joined }, ws);
     if (replacing) this.broadcast({ type: "MOVE", code, x: seat.x, z: seat.z }, ws);
@@ -154,15 +164,28 @@ export class PlazaRoom extends DurableObject<Env> {
     this.leave(ws);
   }
 
-  /** Sockets that never authenticated are dropped after a short grace period. */
+  /** Drops sockets that never authenticated; while anyone is here, keeps the presence subscription fresh. */
   async alarm() {
     let pending = false;
+    let present: Seat | null = null;
     for (const [ws, seat] of this.seats()) {
+      if (seat.authed && !seat.replaced) { present = seat; continue; }
       if (seat.authed) continue;
       if (Date.now() - seat.opened >= AUTH_TIMEOUT_MS) this.reject(ws, CLOSE.timeout, "auth_timeout");
       else pending = true;
     }
-    if (pending) await this.ctx.storage.setAlarm(Date.now() + AUTH_TIMEOUT_MS);
+    if (present) await this.hub().subscribe(present.room, present.guildId).catch(() => {});
+    const next = pending ? AUTH_TIMEOUT_MS : present ? HUB_TOUCH_MS : null;
+    if (next) await this.ctx.storage.setAlarm(Date.now() + next);
+  }
+
+  /** From the PresenceHub: a member's Discord activity changed. Everyone here sees it, present or away. */
+  async status(code: string, status: Status | null) {
+    this.broadcast({ type: "STATUS", code, status });
+  }
+
+  private hub() {
+    return this.env.PRESENCE.get(this.env.PRESENCE.idFromName("hub"));
   }
 
   private leave(ws: WebSocket) {
@@ -171,6 +194,8 @@ export class PlazaRoom extends DurableObject<Env> {
     seat.authed = false;
     ws.serializeAttachment(seat);
     this.broadcast({ type: "LEAVE", code: seat.code }, ws);
+    const anyoneLeft = this.seats().some(([other, s]) => other !== ws && s.authed && !s.replaced);
+    if (!anyoneLeft) this.hub().unsubscribe(seat.room).catch(() => {});
   }
 
   private seats(): [WebSocket, Seat][] {

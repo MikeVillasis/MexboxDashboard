@@ -20,6 +20,16 @@ allowlist and (later) the plaza rooms. See `.scratch/discord-activity/spec.md`.
 10. In a voice channel of that server: Activities (rocket icon) → your app. While unverified, members who can't see it
     need to be added under **App Testers**.
 
+## Thought bubbles (optional, Discord bot)
+Avatars show what members are playing / listening to / watching, from their Discord status. This needs a bot:
+11. **Bot → Reset Token**, then from this folder: `npx wrangler secret put DISCORD_BOT_TOKEN` (never paste it anywhere else).
+12. **Bot → Privileged Gateway Intents → Presence Intent: on.** (Free, no review under 100 servers.)
+13. **Installation → Guild Install → scopes: add `bot`** (no permissions needed), then add the bot to your server again
+    with the install link.
+14. `npm run deploy` (also creates the PresenceHub Durable Object).
+Without the token the hub never connects and nobody gets bubbles; everything else works. Members who turned off
+"Share my activity" in Discord never get a bubble. Statuses live in memory only (never in D1).
+
 ## Develop
 - `npm test`: runs inside the Workers runtime against a local D1; Discord is mocked.
 - `npm run dev`: local Worker + front end at http://localhost:8787 (outside Discord it shows the "open from discord"
@@ -28,14 +38,16 @@ allowlist and (later) the plaza rooms. See `.scratch/discord-activity/spec.md`.
 - Front-end work without Discord: `python3 ../tools/web-stub/serve.py` (stub host, all blades).
 - Whole Activity locally, several members, no Discord or Cloudflare account: `node ../tools/activity-dev/dev.mjs`, then
   open `http://localhost:8787/?user=ana&guild=111111111111111111&instance=room1` and the same with `user=ben` in
-  another tab (fake Discord API + `activity/dev/fake-sdk.js`; `user=outsider` is in no server).
+  another tab (fake Discord API + `activity/dev/fake-sdk.js`; `user=outsider` is in no server). A fake Gateway gives ana
+  and ben statuses; change them with `curl "http://127.0.0.1:8788/dev/presence?user=ben&playing=Portal%202"`.
 
 ## Endpoints (also reachable with Discord's `/.proxy` prefix)
 All except token/health need `Authorization: Bearer <token>` and `X-Guild-Id`.
 - `GET /api/avatar` → `{dna|null}`; `PUT /api/avatar {dna}` → the normalised recipe (rules mirror C# `AvatarDna`).
 - `GET /api/plaza/members` → members of your server seen in the last 30 days with an avatar (friend code + recipe only).
 - `GET /api/room?guild=&instance=` (WebSocket) → the shared plaza for that Activity instance (`src/room.ts`); the first
-  message must be `AUTH {token, dna, x, z}`.
+  message must be `AUTH {token, dna, x, z}`. Rooms also relay `STATUS {code, status}` from `src/presence-hub.ts` (one
+  Discord Gateway connection, only while a room has people in it).
 - `POST /api/token {code, guildId}` → `{access_token, expires_in, scope, member}`; only for members of an allowlisted guild.
 - `GET /api/me` with `Authorization: Bearer <token>` and `X-Guild-Id` → the verified member.
 - `GET /api/health`

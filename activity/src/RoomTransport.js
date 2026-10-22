@@ -9,11 +9,12 @@ const RETRY_MS = [1000, 2000, 4000, 8000, 15000, 30000];
 const FINAL = { 4001: "sign-in rejected", 4002: "opened in another window", 4003: "this plaza is full", 4004: "connection error" };
 
 export class RoomTransport {
-  /** getDna: current recipe, sent with AUTH (also on reconnect). */
-  constructor({ url, token, getDna }) {
+  /** getDna: current recipe, sent with AUTH (also on reconnect). onStatus(code, status|null): thought bubbles. */
+  constructor({ url, token, getDna, onStatus = () => {} }) {
     this.url = url;
     this.token = token;
     this.getDna = getDna;
+    this.onStatus = onStatus;
     this.peers = new Set();
     this.position = { x: 0, z: 0 };
     this.attempt = 0;
@@ -59,6 +60,7 @@ export class RoomTransport {
         this.sink.status("online");
         this.sink.log("online", m.you);
         for (const peer of m.peers ?? []) this.join(peer);
+        for (const [code, status] of Object.entries(m.statuses ?? {})) this.onStatus(code, status);
         break;
       case "JOIN": this.join(m); break;
       case "MOVE": this.sink.data(m.code, { type: "MOVE", x: m.x, z: m.z }); break;
@@ -67,6 +69,7 @@ export class RoomTransport {
       case "LEAVE":
         if (this.peers.delete(m.code)) this.sink.close(m.code);
         break;
+      case "STATUS": if (typeof m.code === "string") this.onStatus(m.code, m.status ?? null); break;
       case "ERROR": this.sink.log("room-error", "", String(m.error)); break;
     }
   }

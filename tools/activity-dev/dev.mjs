@@ -6,13 +6,20 @@
 //        and http://localhost:8787/?user=ben&guild=111111111111111111&instance=room1   (another tab = another member)
 //
 // Any alphanumeric ?user= is a member of the dev guild; ?user=outsider is a member of no guild.
+//
+// A fake Discord Gateway (thought bubbles) starts with ana listening to music and ben playing a game. Change someone's
+// status while it runs:  curl "http://127.0.0.1:8788/dev/presence?user=ben&playing=Portal%202"
+//                        (&listening=Song%20–%20Artist, &watching=..., or nothing to clear)
 import { execFileSync, spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import http from "node:http";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..", "..");
 const GUILD = "111111111111111111";
 const FAKE_DISCORD_PORT = 8788;
+const FAKE_GATEWAY_PORT = 8789;
+const { WebSocketServer } = createRequire(path.join(root, "activity", "package.json"))("ws");
 const PORT = 8787;
 
 /** Stable fake snowflake per user name. */
@@ -35,10 +42,48 @@ const fakeDiscord = http.createServer((req, res) => {
       if (user === "outsider" || member[1] !== GUILD) return send(404, { message: "Unknown Guild" });
       return send(200, { nick: null, user: { id: idFor(user), username: user, global_name: user[0].toUpperCase() + user.slice(1) } });
     }
+    if (req.url?.startsWith("/dev/presence")) {
+      const q = new URL(req.url, "http://x").searchParams;
+      const user = q.get("user") ?? "";
+      presences.set(user, activitiesFrom(q));
+      for (const ws of gateway.clients) dispatch(ws, "PRESENCE_UPDATE", presence(user));
+      return send(200, { user, activities: presences.get(user) });
+    }
     send(404, { message: "not faked" });
   });
 });
 fakeDiscord.listen(FAKE_DISCORD_PORT, "127.0.0.1");
+
+// ───────────── Fake Gateway: HELLO → IDENTIFY → READY + GUILD_CREATE (presences) → PRESENCE_UPDATE ─────────────
+
+const presences = new Map([
+  ["ana", [{ type: 2, name: "Spotify", details: "Still Alive", state: "GLaDOS" }]],
+  ["ben", [{ type: 0, name: "Halo Infinite" }]],
+]);
+function activitiesFrom(q) {
+  if (q.get("playing")) return [{ type: 0, name: q.get("playing") }];
+  if (q.get("listening")) { const [details, state] = q.get("listening").split(" – "); return [{ type: 2, name: "Spotify", details, state }]; }
+  if (q.get("watching")) return [{ type: 3, name: "YouTube", details: q.get("watching") }];
+  return [];
+}
+const presence = (user) => ({ guild_id: GUILD, user: { id: idFor(user) }, status: "online", activities: presences.get(user) ?? [] });
+let seq = 0;
+const dispatch = (ws, t, d) => ws.send(JSON.stringify({ op: 0, s: ++seq, t, d }));
+
+const gateway = new WebSocketServer({ port: FAKE_GATEWAY_PORT, host: "127.0.0.1" });
+gateway.on("connection", (ws) => {
+  ws.send(JSON.stringify({ op: 10, d: { heartbeat_interval: 10000 } }));
+  ws.on("message", (raw) => {
+    const m = JSON.parse(String(raw));
+    if (m.op === 1) ws.send(JSON.stringify({ op: 11 }));
+    if (m.op === 2) {
+      if (m.d?.token !== "dev-bot" || !(m.d?.intents & (1 << 8))) { ws.close(4004, "bad token or missing presence intent"); return; }
+      console.log("fake gateway: bot identified");
+      dispatch(ws, "READY", { session_id: "dev", user: { id: "1", username: "mexbox" } });
+      dispatch(ws, "GUILD_CREATE", { id: GUILD, presences: [...presences.keys()].map(presence) });
+    }
+  });
+});
 
 execFileSync("node", [path.join(root, "activity", "build.mjs"), "--dev"], { stdio: "inherit" });
 const wrangler = ["--prefix", path.join(root, "server"), "wrangler"];
@@ -51,11 +96,13 @@ const dev = spawn("npx", [
   "--var", `DISCORD_API:http://127.0.0.1:${FAKE_DISCORD_PORT}/api`,
   "--var", `ALLOWED_GUILD_IDS:${GUILD}`,
   "--var", "DISCORD_CLIENT_SECRET:dev-only",
+  "--var", "DISCORD_BOT_TOKEN:dev-bot",
+  "--var", `DISCORD_GATEWAY:http://127.0.0.1:${FAKE_GATEWAY_PORT}/`,
   "--var", `EXTRA_ORIGINS:http://localhost:${PORT}`,
 ], { stdio: "inherit", cwd: root });
 
 console.log(`\nfake discord on :${FAKE_DISCORD_PORT}; activity on http://localhost:${PORT}/?user=ana&guild=${GUILD}&instance=room1\n`);
-const stop = () => { dev.kill("SIGINT"); fakeDiscord.close(); process.exit(0); };
+const stop = () => { dev.kill("SIGINT"); fakeDiscord.close(); gateway.close(); process.exit(0); };
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
-dev.on("exit", (code) => { fakeDiscord.close(); process.exit(code ?? 0); });
+dev.on("exit", (code) => { fakeDiscord.close(); gateway.close(); process.exit(code ?? 0); });

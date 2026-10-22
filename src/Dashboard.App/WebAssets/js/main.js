@@ -49,7 +49,8 @@ async function loadAvatar() {
 // ───────────── P2P friends ─────────────
 
 let net = null;
-const friends = new Map(); // code → { code, name, color, online }
+let myCode = null;
+const friends = new Map(); // code → { code, name, color, online, status? }
 const friendAvatar = (code) => plaza.avatars.get(`friend_${code}`);
 const logNet = (event, peer = "", detail = "") => Xbox.send("NET_EVENT", { event, peer, detail });
 
@@ -58,7 +59,7 @@ function renderFriends() { dashboard.setFriends([...friends.values()].sort((a, b
 /// Friends met before roam the plaza as NPCs from their cached recipes, even while they're offline.
 async function loadFriends() {
   for (const f of JSON.parse(await backend.GetFriendsJson())) {
-    friends.set(f.code, { code: f.code, name: f.dna.name, color: f.dna.shirtColor, online: false });
+    friends.set(f.code, { ...friends.get(f.code), code: f.code, name: f.dna.name, color: f.dna.shirtColor, online: false });
     plaza.upsertFriend(f.dna, { asleep: Xbox.awayAsleep });
   }
   renderFriends();
@@ -70,13 +71,14 @@ async function acceptRecipe(code, dna, position) {
   if (!json) { logNet("rejected-recipe", code); return null; }
   const clean = JSON.parse(json);
   await plaza.upsertFriend(clean, { live: true, ...position });
-  friends.set(code, { code, name: clean.name, color: clean.shirtColor, online: true });
+  friends.set(code, { ...friends.get(code), code, name: clean.name, color: clean.shirtColor, online: true }); // keeps any status
   renderFriends();
   return clean;
 }
 
 async function startNetwork(connectTo) {
   const code = await backend.GetFriendCode();
+  myCode = code;
   dashboard.setFriendCode(code);
   net = new NetworkManager(code, logNet, Xbox.createTransport?.(code) ?? undefined);
   // Wherever the local avatar decides to walk (its own AI, a floor click, the customiser sending it home), peers follow.
@@ -141,6 +143,13 @@ if (backend) {
     if (p.plazaSelfTest) { selfTest = true; plaza.setRunning(true); setTimeout(plazaSelfTest, 8000); }
   });
   Xbox.on("LIBRARY_CHANGED", loadLibrary);
+  // Hosts with a presence feed (the Discord Activity) report what members are playing / listening to: a thought
+  // bubble over their avatar, yours included, and a line in the friends list.
+  Xbox.on("FRIEND_STATUS", ({ code, status }) => {
+    plaza.setThought(code === myCode ? "local" : `friend_${code}`, status);
+    const f = friends.get(code);
+    if (f) { f.status = status; renderFriends(); }
+  });
   Xbox.on("MEDIA_UPDATED", (media) => dashboard.setMedia(media));
   // Idle the GPU while a game is in front (the self-test keeps simulating so it can run unattended in the background).
   let selfTest = false;
