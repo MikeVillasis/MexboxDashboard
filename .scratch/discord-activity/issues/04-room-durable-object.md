@@ -1,5 +1,5 @@
 # 04 Authoritative room
-Status: in-progress (built and tested locally; needs deploy + a check inside Discord)
+Status: done
 Blocked by: 03
 
 - Room Durable Object per Activity instance id, WebSocket hibernation.
@@ -19,3 +19,4 @@ Blocked by: 03
   Tests: 33 server (incl. live WebSocket rooms), 5 identity. Local multi-user run: `node tools/activity-dev/dev.mjs`
   (fake Discord API + fake SDK + real Worker/room/D1) checked two members seeing each other, moves relayed to a third
   client, leave → asleep with z's, outsider blocked, away list. Stub host self-test still passes.
+- 2026-10-22: deployed and tested in Discord by the owner; follow-up UI notes handled (scrolling panels, hide menu, camera follow, keyboard hints).

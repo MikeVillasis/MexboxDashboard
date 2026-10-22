@@ -88,8 +88,9 @@
           <div class="blade-header">
             <h1>plaza</h1>
             <p class="subtitle">your neighbours hang out here</p>
+            <button id="collapse-ui" class="pill small collapse-toggle interactive" title="hide the menu and look at the plaza">&#x25C0; hide menu</button>
           </div>
-          <div class="side-panel">
+          <div class="side-panel interactive">
             <h3>your friend code</h3>
             <div class="friend-code"><span id="friend-code">······</span><em id="net-status" class="subtitle">offline</em></div>
 
@@ -100,10 +101,10 @@
             </form>
 
             <h3>friends</h3>
-            <ul id="friend-list" class="plain-list"><li class="subtitle">no friends yet. share your code!</li></ul>
+            <ul id="friend-list" class="plain-list selectable"><li class="subtitle">no friends yet. share your code!</li></ul>
 
             <h3>residents</h3>
-            <ul id="plaza-list" class="plain-list"></ul>
+            <ul id="plaza-list" class="plain-list selectable"></ul>
             <p class="subtitle">friends you've met keep hanging out here when they're offline.</p>
           </div>
         </div>
@@ -117,7 +118,7 @@
             <h1>my avatar</h1>
             <p id="avatar-name" class="subtitle"></p>
           </div>
-          <div class="side-panel">
+          <div class="side-panel interactive">
             <ul id="avatar-options" class="item-list option-list interactive"></ul>
           </div>
         </div>
@@ -136,14 +137,28 @@
       </section>
     </div>
 
-    <footer class="hints">
+    <!-- Input hints: one footer per input style; the host picks which shows (Xbox.inputHints). -->
+    <footer class="hints" data-input="controller">
       <span><i class="btn a">A</i>select</span>
       <span><i class="btn b">B</i>back</span>
-      <span id="hint-x" hidden><i class="btn x">X</i><em></em></span>
-      <span id="hint-y" hidden><i class="btn y">Y</i><em></em></span>
-      <span id="hint-dpad" hidden><i class="btn sh">&#x25C0;</i><i class="btn sh">&#x25B6;</i>change</span>
+      <span data-hint="x" hidden><i class="btn x">X</i><em></em></span>
+      <span data-hint="y" hidden><i class="btn y">Y</i><em></em></span>
+      <span data-hint="dpad" hidden><i class="btn sh">&#x25C0;</i><i class="btn sh">&#x25B6;</i>change</span>
       <span><i class="btn sh">LB</i><i class="btn sh">RB</i>switch blades</span>
     </footer>
+    <footer class="hints" data-input="keyboard" hidden>
+      <span><kbd>enter</kbd>select</span>
+      <span><kbd>esc</kbd>back</span>
+      <span data-hint="x" hidden><kbd>x</kbd><em></em></span>
+      <span data-hint="y" hidden><kbd>y</kbd><em></em></span>
+      <span data-hint="dpad" hidden><kbd>&#x2191;</kbd><kbd>&#x2193;</kbd>pick<kbd>&#x2190;</kbd><kbd>&#x2192;</kbd>change</span>
+      <span><kbd>q</kbd><kbd>e</kbd>switch blades</span>
+      <span data-hint="hide" hidden><kbd>h</kbd>hide menu</span>
+      <span><kbd>g</kbd>gamercard</span>
+    </footer>
+
+    <!-- Collapsed UI: only this handle stays, on the left edge, to bring the blades back. -->
+    <button id="expand-ui" class="expand-handle interactive" hidden title="show the menu">menu &#x25B6;</button>
 
     <!-- Gamercard overlay -->
     <div id="gamercard" class="gamercard" hidden>

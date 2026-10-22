@@ -25,6 +25,7 @@ const $ = (id) => document.getElementById(id);
 
 export class Dashboard extends EventTarget {
   /// options.blades: names the host supports (null = all). Others stay in the DOM, hidden, so their elements still resolve.
+  /// options.inputHints: "controller" (default) or "keyboard" footer.
   constructor(backend, options = {}) {
     super();
     this.backend = backend;
@@ -42,6 +43,10 @@ export class Dashboard extends EventTarget {
     this.media = null;
     this.soundEnabled = true;
     this.lastPointer = null;
+    this.collapsed = false;
+    this.focusedAvatarId = null; // friend/resident the camera is following (friends blade)
+    const input = options.inputHints === "keyboard" ? "keyboard" : "controller";
+    for (const footer of document.querySelectorAll(".hints[data-input]")) footer.hidden = footer.dataset.input !== input;
 
     this.buildHeader();
     this.buildSystemMenu();
@@ -58,6 +63,8 @@ export class Dashboard extends EventTarget {
       if (type === "BACK" || type === "SELECT_ITEM") this.closeGamercard();
       return;
     }
+    // Collapsed: Back (or the toggle) brings the menu back; everything else still works on the hidden blades.
+    if (this.collapsed && (type === "BACK" || type === "TOGGLE_UI")) { this.setCollapsed(false); return; }
 
     switch (type) {
       case "SWITCH_BLADE": this.selectBlade(this.selected + payload.delta); break;
@@ -71,6 +78,7 @@ export class Dashboard extends EventTarget {
         if (this.bladeName() === "media") this.mediaCommand("MediaNext");
         else if (this.bladeName() === "games") this.toast("custom cover art is set from the native shell for now");
         break;
+      case "TOGGLE_UI": if (this.bladeName() === "friends") this.setCollapsed(true); break;
       case "OPEN_GAMERCARD":
         if (payload?.card) this.openGamercard(payload.card);       // a plaza avatar, summarised by C#
         else $("gamercard").hidden ? this.openGamercard() : this.closeGamercard();
@@ -111,6 +119,8 @@ export class Dashboard extends EventTarget {
     index = Math.max(0, Math.min(this.blades.length - 1, index));
     if (index === this.selected) return;
     this.selected = index;
+    this.setCollapsed(false);
+    this.focusAvatar(null);
     this.layout(animate);
     this.sound("BladeSwoosh");
     this.dispatchEvent(new CustomEvent("bladechange", { detail: { blade: this.bladeName() } }));
@@ -152,10 +162,30 @@ export class Dashboard extends EventTarget {
 
   updateHints() {
     const blade = this.bladeName();
-    const set = (id, text) => { $(id).hidden = !text; $(id).querySelector("em").textContent = text || ""; };
-    set("hint-x", blade === "media" ? "previous" : "");
-    set("hint-y", blade === "media" ? "next track" : blade === "games" ? "cover art" : "");
-    $("hint-dpad").hidden = blade !== "avatar";
+    const hints = (name) => document.querySelectorAll(`.hints [data-hint="${name}"]`);
+    const set = (name, text) => { for (const el of hints(name)) { el.hidden = !text; el.querySelector("em").textContent = text || ""; } };
+    set("x", blade === "media" ? "previous" : "");
+    set("y", blade === "media" ? "next track" : blade === "games" ? "cover art" : "");
+    for (const el of hints("dpad")) el.hidden = blade !== "avatar";
+    for (const el of hints("hide")) el.hidden = blade !== "friends";
+  }
+
+  /// Slides the blades off to the left so the plaza is on its own; a handle on the left edge brings them back.
+  setCollapsed(collapsed) {
+    if (collapsed === this.collapsed) return;
+    this.collapsed = collapsed;
+    $("dashboard-ui").classList.toggle("collapsed", collapsed);
+    $("expand-ui").hidden = !collapsed;
+    this.sound(collapsed ? "BladeSwoosh" : "Back");
+    this.dispatchEvent(new CustomEvent("collapsechange", { detail: { collapsed } }));
+  }
+
+  /// Friends/residents list selection → main.js points the camera at that avatar (null = back to the wide shot).
+  focusAvatar(id) {
+    if (id === this.focusedAvatarId) return;
+    this.focusedAvatarId = id;
+    for (const li of document.querySelectorAll(".plain-list.selectable li")) li.classList.toggle("selected", Boolean(id) && li.dataset.avatarId === id);
+    this.dispatchEvent(new CustomEvent("focusavatar", { detail: { id } }));
   }
 
   // ───────────── Games ─────────────
@@ -314,6 +344,7 @@ export class Dashboard extends EventTarget {
     if (index === this.avatarIndex) return;
     this.avatarIndex = index;
     for (const li of $("avatar-options").children) li.classList.toggle("focused", Number(li.dataset.index) === index);
+    $("avatar-options").children[index]?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     this.sound("Navigate");
   }
 
@@ -343,6 +374,8 @@ export class Dashboard extends EventTarget {
     if (friends.length === 0) { list.innerHTML = `<li class="subtitle">no friends yet. share your code!</li>`; return; }
     list.replaceChildren(...friends.map((f) => {
       const li = document.createElement("li");
+      li.dataset.avatarId = `friend_${f.code}`;
+      li.classList.toggle("selected", li.dataset.avatarId === this.focusedAvatarId);
       li.innerHTML = `<i class="dot"></i><i class="swatch"></i><span></span><em></em>`;
       li.querySelector(".dot").classList.toggle("online", f.online);
       li.querySelector(".swatch").style.background = f.color;
@@ -355,6 +388,7 @@ export class Dashboard extends EventTarget {
   setPlazaResidents(residents) {
     $("plaza-list").replaceChildren(...residents.map((dna) => {
       const li = document.createElement("li");
+      li.dataset.avatarId = dna.id;
       li.innerHTML = `<i class="swatch"></i><span></span>`;
       li.querySelector(".swatch").style.background = dna.shirtColor;
       li.querySelector("span").textContent = dna.name;
@@ -427,6 +461,18 @@ export class Dashboard extends EventTarget {
       const step = e.target.closest(".step");
       if (step) this.stepAvatarOption(index, Number(step.dataset.step));
     });
+
+    // Click a friend or resident to follow them with the camera; click again to go back to the wide shot.
+    for (const list of document.querySelectorAll(".plain-list.selectable")) {
+      list.addEventListener("click", (e) => {
+        const id = e.target.closest("li")?.dataset.avatarId;
+        if (!id) return;
+        this.sound("Select");
+        this.focusAvatar(id === this.focusedAvatarId ? null : id);
+      });
+    }
+    $("collapse-ui").addEventListener("click", () => this.setCollapsed(true));
+    $("expand-ui").addEventListener("click", () => this.setCollapsed(false));
 
     $("add-friend").addEventListener("submit", (e) => {
       e.preventDefault();

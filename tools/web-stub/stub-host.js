@@ -51,10 +51,12 @@
     MediaPrevious: call(() => log("media previous")),
   };
 
-  // Keys: the WebView2 host maps KEY → NAV commands in C#; the stub does the same minimal mapping.
-  const KEYS = { ArrowLeft: ["SWITCH_BLADE", { delta: -1 }], ArrowRight: ["SWITCH_BLADE", { delta: 1 }],
+  // Keys: mirrors C# WebShellWindow.MapKey (arrows are d-pad moves; the page decides what they mean per blade).
+  const KEYS = { ArrowLeft: ["NAVIGATE_DPAD", { direction: "left" }], ArrowRight: ["NAVIGATE_DPAD", { direction: "right" }],
                  ArrowUp: ["NAVIGATE_DPAD", { direction: "up" }], ArrowDown: ["NAVIGATE_DPAD", { direction: "down" }],
-                 Enter: ["SELECT_ITEM", null], Escape: ["BACK", null] };
+                 q: ["SWITCH_BLADE", { delta: -1 }], e: ["SWITCH_BLADE", { delta: 1 }], Tab: ["SWITCH_BLADE", { delta: 1 }],
+                 Enter: ["SELECT_ITEM", null], Escape: ["BACK", null], Backspace: ["BACK", null],
+                 g: ["OPEN_GAMERCARD", null], h: ["TOGGLE_UI", null] };
 
   window.XboxHostAdapter = {
     name: "stub",

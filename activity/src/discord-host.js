@@ -134,19 +134,35 @@ const sound = {
   },
 };
 
-// The Windows host maps KEY → controller commands in C#; the Activity does the same mapping here.
-const KEYS = {
-  ArrowLeft: ["SWITCH_BLADE", { delta: -1 }], ArrowRight: ["SWITCH_BLADE", { delta: 1 }],
-  PageUp: ["SWITCH_BLADE", { delta: -1 }], PageDown: ["SWITCH_BLADE", { delta: 1 }],
-  ArrowUp: ["NAVIGATE_DPAD", { direction: "up" }], ArrowDown: ["NAVIGATE_DPAD", { direction: "down" }],
-  Enter: ["SELECT_ITEM", null], " ": ["SELECT_ITEM", null], Escape: ["BACK", null], Backspace: ["BACK", null],
-};
+// The Windows host maps KEY → commands in C# (WebShellWindow.MapKey); the Activity mirrors that map here, plus H to
+// hide the menu. The page decides what a d-pad move means on each blade.
+function mapKey(key, shift) {
+  switch (key) {
+    case "ArrowUp": return ["NAVIGATE_DPAD", { direction: "up" }];
+    case "ArrowDown": return ["NAVIGATE_DPAD", { direction: "down" }];
+    case "ArrowLeft": return ["NAVIGATE_DPAD", { direction: "left" }];
+    case "ArrowRight": return ["NAVIGATE_DPAD", { direction: "right" }];
+    case "PageUp": return ["NAVIGATE_DPAD", { direction: "pageup" }];
+    case "PageDown": return ["NAVIGATE_DPAD", { direction: "pagedown" }];
+    case "Enter": case " ": return ["SELECT_ITEM", null];
+    case "Escape": case "Backspace": return ["BACK", null];
+    case "q": case "Q": return ["SWITCH_BLADE", { delta: -1 }];
+    case "e": case "E": return ["SWITCH_BLADE", { delta: 1 }];
+    case "Tab": return ["SWITCH_BLADE", { delta: shift ? -1 : 1 }];
+    case "x": case "X": return ["ACTION_X", null];
+    case "y": case "Y": return ["ACTION_Y", null];
+    case "g": case "G": return ["OPEN_GAMERCARD", null];
+    case "h": case "H": return ["TOGGLE_UI", null];
+  }
+  return null;
+}
 
 window.XboxHostAdapter = {
   name: "discord",
   blades: BLADES,
   backend,
   awayAsleep: true,
+  inputHints: "keyboard",
   /** Called by main.js after HOST_READY (so sign-in is done): the shared room for this Activity instance. */
   createTransport() {
     const s = current;
@@ -155,7 +171,8 @@ window.XboxHostAdapter = {
     return new RoomTransport({ url: `${scheme}://${location.host}${API}/room?${params}`, token: s.token, getDna: () => s.dna });
   },
   post({ type, payload }) {
-    if (type === "KEY" && KEYS[payload?.key]) emit(...KEYS[payload.key]);
+    const command = type === "KEY" ? mapKey(payload?.key, payload?.shift) : null;
+    if (command) emit(...command);
     else if (type === "JS_ERROR") console.error("page error", payload);
   },
   listen(fn) {

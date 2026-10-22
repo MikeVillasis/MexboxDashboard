@@ -12,6 +12,7 @@
 //             blades: names of the blades this host supports (omitted = all of them).
 //             createTransport(friendCode): a plaza transport (js/net/PeerTransport.js contract); omitted = PeerJS P2P.
 //             awayAsleep: friends who aren't connected nap in place instead of roaming as NPCs.
+//             inputHints: "keyboard" or "controller" (default) footer hints.
 //
 // BACKEND CONTRACT (method names match C# XboxHostBridge; a host may leave out what it can't do, callers use ?.):
 //   GetVersion GetLibraryJson GetSettingsJson GetProfileJson FocusGame(id) LaunchGame(id) Rescan
@@ -58,6 +59,7 @@
     blades: (host && host.blades) || null,
     createTransport: host && host.createTransport ? (code) => host.createTransport(code) : null,
     awayAsleep: Boolean(host && host.awayAsleep),
+    inputHints: (host && host.inputHints) || "controller",
 
     backend: host ? host.backend : null,
 

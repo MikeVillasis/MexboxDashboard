@@ -5,7 +5,7 @@ import { RESIDENTS } from "./avatar/residents.js";
 import { NetworkManager } from "./net/NetworkManager.js";
 
 const backend = Xbox.backend;
-const dashboard = new Dashboard(backend, { blades: Xbox.blades });
+const dashboard = new Dashboard(backend, { blades: Xbox.blades, inputHints: Xbox.inputHints });
 const report = (event, avatar, other) => Xbox.send("PLAZA_EVENT", { event, id: avatar?.id, with: other?.id ?? null });
 const plaza = new Plaza(document.getElementById("viewport-3d"), {
   // A floor click sends your avatar walking there (and tells your friends, so theirs walks too).
@@ -17,6 +17,9 @@ const plaza = new Plaza(document.getElementById("viewport-3d"), {
 });
 
 dashboard.addEventListener("bladechange", (e) => plaza.setBlade(e.detail.blade));
+dashboard.addEventListener("focusavatar", (e) => { if (!plaza.focusAvatar(e.detail.id) && e.detail.id) dashboard.toast("they haven't arrived in the plaza yet"); });
+// Collapsed: the plaza fills the screen, so a followed avatar is centred instead of framed beside the panel.
+dashboard.addEventListener("collapsechange", (e) => plaza.director.framing(!e.detail.collapsed));
 dashboard.setPlazaResidents(RESIDENTS);
 plaza.spawnResidents();
 
@@ -144,7 +147,7 @@ if (backend) {
   let selfTest = false;
   Xbox.on("SHELL_ACTIVE", (p) => { if (!selfTest) plaza.setRunning(p.active); });
 
-  for (const type of ["SWITCH_BLADE", "NAVIGATE_DPAD", "SELECT_ITEM", "BACK", "ACTION_X", "ACTION_Y", "OPEN_GAMERCARD"]) {
+  for (const type of ["SWITCH_BLADE", "NAVIGATE_DPAD", "SELECT_ITEM", "BACK", "ACTION_X", "ACTION_Y", "OPEN_GAMERCARD", "TOGGLE_UI"]) {
     Xbox.on(type, (payload) => dashboard.handleCommand(type, payload));
   }
 

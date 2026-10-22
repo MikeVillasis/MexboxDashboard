@@ -220,6 +220,14 @@ export class Plaza {
     }
   }
 
+  /// Point the camera at one avatar (friends list selection); null or an unknown id returns to the blade shot.
+  focusAvatar(id) {
+    const avatar = id ? this.avatars.get(id) : null;
+    this.director.follow(avatar?.root ?? null);
+    avatar?.face.express("happy", 1.2);
+    return Boolean(avatar);
+  }
+
   /// Blade change → camera shot + world tint.
   setBlade(blade) {
     this.blade = blade;
