@@ -94,6 +94,51 @@ describe("POST /api/token", () => {
     const res = await post("/api/token", { code: "goodcode123", guildId: GUILD, pad: "x".repeat(5000) });
     expect(res.status).toBe(413);
   });
+
+  it("stops reading a streamed body without Content-Length at the cap", async () => {
+    const fetch = mockDiscord();
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        if (pulled > 1000) { controller.close(); return; } // 1000 x 1 KiB would be ~1 MiB if fully read
+        controller.enqueue(new Uint8Array(1024).fill(0x20));
+      },
+    });
+    const res = await call("/api/token", { method: "POST", headers: { origin: ORIGIN }, body, duplex: "half" } as RequestInit);
+    expect(res.status).toBe(413);
+    expect(pulled).toBeLessThan(10);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("rate limiting", () => {
+  it("turns away a caller over the limit before reaching Discord, keyed by client IP", async () => {
+    const fetch = mockDiscord();
+    const limit = vi.spyOn(testEnv.DISCORD_CALLS, "limit").mockResolvedValue({ success: false });
+    const res = await post("/api/token", { code: "goodcode123", guildId: GUILD }, { "cf-connecting-ip": "203.0.113.9" });
+    expect(res.status).toBe(429);
+    expect(await res.json()).toEqual({ error: "rate_limited" });
+    expect(limit).toHaveBeenCalledWith({ key: "203.0.113.9" });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("the real limiter allows 60 calls a minute per IP, then refuses", async () => {
+    const headers = { "x-guild-id": GUILD, "cf-connecting-ip": "198.51.100.77" };
+    const statuses: number[] = [];
+    for (let i = 0; i < 61; i++) statuses.push((await call("/api/me", { headers })).status);
+    expect(statuses.slice(0, 60).every((s) => s === 401)).toBe(true); // within budget: reaches auth (no token)
+    expect(statuses[60]).toBe(429);
+    const otherIp = await call("/api/me", { headers: { ...headers, "cf-connecting-ip": "198.51.100.78" } });
+    expect(otherIp.status).toBe(401);
+  });
+
+  it("does not count health checks or static files", async () => {
+    const limit = vi.spyOn(testEnv.DISCORD_CALLS, "limit");
+    await call("/api/health");
+    await call("/");
+    expect(limit).not.toHaveBeenCalled();
+  });
 });
 
 describe("origin and auth", () => {

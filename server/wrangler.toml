@@ -27,5 +27,12 @@ database_name = "mexbox"
 database_id = "530c1a92-19d3-49ff-b7f3-32bf528e31a2"   # from: npx wrangler d1 create mexbox
 migrations_dir = "migrations"
 
+# Caps /api calls that reach Discord, per client IP, so nobody can burn the app's Discord rate limit.
+# Inside Discord all members may share the proxy's IPs, so the limit stays well above real sign-in traffic.
+[[ratelimits]]
+name = "DISCORD_CALLS"
+namespace_id = "1001"
+simple = { limit = 60, period = 60 }
+
 [observability]
 enabled = true

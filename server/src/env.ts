@@ -2,6 +2,8 @@ export interface Env {
   DB: D1Database;
   /** The built Activity front end (wrangler.toml [assets]). */
   ASSETS: Fetcher;
+  /** Per-IP limiter for API calls that reach Discord (wrangler.toml [[ratelimits]]). */
+  DISCORD_CALLS: RateLimit;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   ALLOWED_GUILD_IDS?: string;

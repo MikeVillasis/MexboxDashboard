@@ -44,7 +44,16 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+/** Routes that may call Discord; each one counts against the caller's per-IP budget. */
+const DISCORD_ROUTES = new Set(["/api/token", "/api/me"]);
+
 async function route(pathname: string, request: Request, env: Env): Promise<Response> {
+  if (DISCORD_ROUTES.has(pathname)) {
+    const ip = request.headers.get("cf-connecting-ip") ?? "unknown";
+    const { success } = await env.DISCORD_CALLS.limit({ key: ip });
+    if (!success) throw new HttpError(429, "rate_limited");
+  }
+
   if (pathname === "/api/token" && request.method === "POST") {
     const body = await readJson<{ code?: unknown; guildId?: unknown }>(request);
     return json(await exchangeCode(env, body.code, body.guildId));

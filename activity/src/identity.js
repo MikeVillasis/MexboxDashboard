@@ -62,5 +62,6 @@ export const SIGN_IN_ERRORS = {
   not_member: "you need to be a member of this server to enter the plaza",
   code_rejected: "discord sign-in expired, close the activity and try again",
   discord_busy: "discord is busy right now, try again in a minute",
+  rate_limited: "too many sign-ins right now, try again in a minute",
   origin_not_allowed: "this page has to be opened from discord",
 };
