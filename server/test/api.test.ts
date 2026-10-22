@@ -123,14 +123,27 @@ describe("rate limiting", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("the real limiter allows 60 calls a minute per IP, then refuses", async () => {
-    const headers = { "x-guild-id": GUILD, "cf-connecting-ip": "198.51.100.77" };
+  it("the real limiter allows 60 Discord calls a minute per IP, then refuses", async () => {
+    mockDiscord();
     const statuses: number[] = [];
-    for (let i = 0; i < 61; i++) statuses.push((await call("/api/me", { headers })).status);
-    expect(statuses.slice(0, 60).every((s) => s === 401)).toBe(true); // within budget: reaches auth (no token)
+    for (let i = 0; i < 61; i++) {
+      const headers = { authorization: `Bearer unknown-${i}`, "x-guild-id": GUILD, "cf-connecting-ip": "198.51.100.77" };
+      statuses.push((await call("/api/me", { headers })).status);
+    }
+    expect(statuses.slice(0, 60).every((s) => s === 401)).toBe(true); // within budget: Discord says the token is bad
     expect(statuses[60]).toBe(429);
-    const otherIp = await call("/api/me", { headers: { ...headers, "cf-connecting-ip": "198.51.100.78" } });
+    const otherIp = await call("/api/me", { headers: { authorization: "Bearer unknown-x", "x-guild-id": GUILD, "cf-connecting-ip": "198.51.100.78" } });
     expect(otherIp.status).toBe(401);
+  });
+
+  it("does not spend budget on cached sign-ins or requests without a token", async () => {
+    mockDiscord();
+    const headers = { authorization: "Bearer user-token", "x-guild-id": GUILD, "cf-connecting-ip": "198.51.100.90" };
+    await call("/api/me", { headers });
+    const limit = vi.spyOn(testEnv.DISCORD_CALLS, "limit");
+    for (let i = 0; i < 5; i++) await call("/api/me", { headers });
+    await call("/api/me", { headers: { "x-guild-id": GUILD } });
+    expect(limit).not.toHaveBeenCalled();
   });
 
   it("does not count health checks or static files", async () => {

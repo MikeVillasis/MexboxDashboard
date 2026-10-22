@@ -25,6 +25,14 @@
         "--local"
       ],
       "port": 8787
+    },
+    {
+      "name": "activity-dev",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "tools/activity-dev/dev.mjs"
+      ],
+      "port": 8787
     }
   ]
 }

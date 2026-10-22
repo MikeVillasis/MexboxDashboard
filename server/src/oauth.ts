@@ -1,12 +1,14 @@
 // Embedded App SDK flow: the Activity calls authorize() → gets a one-time code → POSTs it here → we swap it for an
 // access token with the client secret (which never leaves the Worker) → the Activity calls authenticate() with it.
 
-import { verifyMember } from "./auth";
+import { spendDiscordCall, verifyMember } from "./auth";
 import { discordApi, type Env } from "./env";
 import { HttpError } from "./http";
 
-export async function exchangeCode(env: Env, code: unknown, guildId: unknown) {
+export async function exchangeCode(env: Env, code: unknown, guildId: unknown, ip: string) {
   if (typeof code !== "string" || !/^[A-Za-z0-9]{10,128}$/.test(code)) throw new HttpError(400, "bad_code");
+
+  await spendDiscordCall(env, ip);
 
   const response = await fetch(`${discordApi(env)}/oauth2/token`, {
     method: "POST",
@@ -26,7 +28,7 @@ export async function exchangeCode(env: Env, code: unknown, guildId: unknown) {
   if (typeof token.access_token !== "string") throw new HttpError(502, "discord_error");
 
   // Outsiders get nothing back: the token is only returned to members of an allowed guild.
-  const member = await verifyMember(env, token.access_token, guildId);
+  const member = await verifyMember(env, token.access_token, guildId, ip);
   // The refresh token is dropped on purpose; the Activity re-authorizes per session.
   return { access_token: token.access_token, expires_in: token.expires_in ?? 0, scope: token.scope ?? "", member };
 }

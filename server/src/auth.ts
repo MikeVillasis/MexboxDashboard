@@ -18,17 +18,31 @@ const cache = new Map<string, { member: Member; expires: number }>();
 export async function authenticate(request: Request, env: Env): Promise<Member> {
   const header = request.headers.get("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  if (!token || token.length > 256) throw new HttpError(401, "missing_token");
-  return verifyMember(env, token, request.headers.get("x-guild-id"));
+  // `return await`, not `return`: an already-rejected promise returned from an async function gets its handler a tick
+  // late, which workerd reports as an unhandled rejection.
+  return await verifyMember(env, token, request.headers.get("x-guild-id"), clientIp(request));
 }
 
-export async function verifyMember(env: Env, accessToken: string, guildId: unknown): Promise<Member> {
+export const clientIp = (request: Request) => request.headers.get("cf-connecting-ip") ?? "unknown";
+
+/**
+ * Every call that would reach Discord counts against the caller's per-IP budget, so nobody can burn the app's Discord
+ * rate limit. Cached sign-ins don't count: a normal launch reaches Discord twice (token + member), not per API call.
+ */
+export async function spendDiscordCall(env: Env, ip: string) {
+  const { success } = await env.DISCORD_CALLS.limit({ key: ip });
+  if (!success) throw new HttpError(429, "rate_limited");
+}
+
+export async function verifyMember(env: Env, accessToken: string, guildId: unknown, ip: string): Promise<Member> {
+  if (!accessToken || accessToken.length > 256) throw new HttpError(401, "missing_token");
   if (!isSnowflake(guildId) || !allowedGuilds(env).has(guildId)) throw new HttpError(403, "guild_not_allowed");
 
   const key = `${await sha256Hex(accessToken)}:${guildId}`;
   const hit = cache.get(key);
   if (hit && hit.expires > Date.now()) return hit.member;
 
+  await spendDiscordCall(env, ip);
   const response = await fetch(`${discordApi(env)}/users/@me/guilds/${guildId}/member`, {
     headers: { authorization: `Bearer ${accessToken}` },
   });

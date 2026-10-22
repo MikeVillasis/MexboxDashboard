@@ -21,3 +21,4 @@ server/.dev.vars
 # Discord Activity client (activity/)
 activity/node_modules/
 activity/dist/
+activity/dist-dev/

@@ -27,8 +27,17 @@ database_name = "mexbox"
 database_id = "530c1a92-19d3-49ff-b7f3-32bf528e31a2"   # from: npx wrangler d1 create mexbox
 migrations_dir = "migrations"
 
-# Caps /api calls that reach Discord, per client IP, so nobody can burn the app's Discord rate limit.
-# Inside Discord all members may share the proxy's IPs, so the limit stays well above real sign-in traffic.
+# Shared plaza rooms (SQLite-backed Durable Objects are the free-plan kind).
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "PlazaRoom"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["PlazaRoom"]
+
+# Caps calls that reach Discord (token exchange, uncached sign-in checks), per client IP, so nobody can burn the
+# app's Discord rate limit. Inside Discord members may share the proxy's IPs; a launch costs about 2, so 60/min is ample.
 [[ratelimits]]
 name = "DISCORD_CALLS"
 namespace_id = "1001"

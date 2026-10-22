@@ -56,7 +56,7 @@ function renderFriends() { dashboard.setFriends([...friends.values()].sort((a, b
 async function loadFriends() {
   for (const f of JSON.parse(await backend.GetFriendsJson())) {
     friends.set(f.code, { code: f.code, name: f.dna.name, color: f.dna.shirtColor, online: false });
-    plaza.upsertFriend(f.dna);
+    plaza.upsertFriend(f.dna, { asleep: Xbox.awayAsleep });
   }
   renderFriends();
 }
@@ -75,7 +75,7 @@ async function acceptRecipe(code, dna, position) {
 async function startNetwork(connectTo) {
   const code = await backend.GetFriendCode();
   dashboard.setFriendCode(code);
-  net = new NetworkManager(code, logNet);
+  net = new NetworkManager(code, logNet, Xbox.createTransport?.(code) ?? undefined);
   // Wherever the local avatar decides to walk (its own AI, a floor click, the customiser sending it home), peers follow.
   plaza.ai.onTarget = (agent, x, z) => { if (agent.avatar === plaza.local) net.broadcast({ type: "MOVE", x, z }); };
 
@@ -107,10 +107,10 @@ async function startNetwork(connectTo) {
     const dna = await acceptRecipe(detail.code, detail.dna);
     if (dna) logNet("dna-update", detail.code, dna.name);
   });
-  // Gone offline: they keep wandering your plaza as an NPC.
+  // Gone offline: they keep wandering your plaza as an NPC (or nap there, if the host says away friends sleep).
   net.addEventListener("peerleave", ({ detail }) => {
     const avatar = friendAvatar(detail.code);
-    if (avatar) plaza.ai.setRemote(avatar, false);
+    if (avatar) { plaza.ai.setRemote(avatar, false); plaza.ai.setAsleep(avatar, Xbox.awayAsleep); }
     const f = friends.get(detail.code);
     if (f) { f.online = false; renderFriends(); dashboard.toast(`${f.name} left`); }
   });

@@ -3,11 +3,14 @@
 // wait on the sign-in promise instead.
 //
 // Sign-in: SDK ready → authorize (code) → Worker /api/token (secret stays server-side, guild allowlist enforced there)
-// → authenticate. Phase 03 keeps the avatar for the session only; phase 04 stores it and adds the shared room.
+// → authenticate. The avatar is stored per Discord user by the Worker; the plaza is a shared room per Activity
+// instance (RoomTransport); members who aren't in it nap in the plaza (away list from the Worker).
 
 import { DiscordSDK, RPCCloseCodes } from "@discord/embedded-app-sdk";
-import { clientIdFromHost, defaultDna, friendCode, gamertag, SIGN_IN_ERRORS } from "./identity.js";
+import { clientIdFromHost, defaultDna, friendCode, SIGN_IN_ERRORS } from "./identity.js";
+import { RoomTransport } from "./RoomTransport.js";
 
+/* global DEV_SDK */ // true only in build.mjs --dev (fake SDK, any host); compiled away otherwise
 const SCOPES = ["identify", "guilds.members.read"];
 const API = "/.proxy/api"; // Discord's documented proxy prefix; the Worker accepts it with or without.
 const BLADES = ["friends", "avatar"];
@@ -19,11 +22,13 @@ const loaded = new Promise((resolve) => (document.readyState === "complete" ? re
 class SignInError extends Error {}
 
 const session = signIn();
+let current = null; // the resolved session, for synchronous hooks (createTransport)
+session.then((s) => { current = s; }, () => {});
 session.catch((err) => showBlocker(err instanceof SignInError ? err.message : "couldn't start the plaza, close the activity and try again", err));
 
 async function signIn() {
-  const clientId = clientIdFromHost(location.hostname);
-  if (!clientId || !new URLSearchParams(location.search).has("frame_id")) {
+  const clientId = clientIdFromHost(location.hostname) ?? (DEV_SDK ? "000000000000000000" : null);
+  if (!clientId || (!DEV_SDK && !new URLSearchParams(location.search).has("frame_id"))) {
     throw new SignInError("open the plaza from discord: start the activity in a voice channel");
   }
   const sdk = new DiscordSDK(clientId);
@@ -39,13 +44,29 @@ async function signIn() {
   if (!response.ok) throw new SignInError(SIGN_IN_ERRORS[body.error] ?? `couldn't sign in (${body.error ?? response.status})`);
   await sdk.commands.authenticate({ access_token: body.access_token });
 
-  return { sdk, member: body.member, dna: defaultDna(body.member.discordId, body.member.displayName) };
+  const s = { sdk, token: body.access_token, member: body.member, dna: null };
+  // First visit: store the starter look, so this member naps in the plaza for others while away.
+  const saved = await api(s, "/avatar");
+  s.dna = saved.dna ?? (await api(s, "/avatar", { method: "PUT", body: { dna: defaultDna(s.member.discordId, s.member.displayName) } })).dna;
+  return s;
+}
+
+/** Authenticated Worker call; errors become a SignInError message for the blocker or a rejected promise. */
+async function api(s, path, { method = "GET", body } = {}) {
+  const response = await fetch(`${API}${path}`, {
+    method,
+    headers: { authorization: `Bearer ${s.token}`, "x-guild-id": s.sdk.guildId ?? "", ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await response.json().catch(() => ({}));
+  if (!response.ok) throw new SignInError(SIGN_IN_ERRORS[json.error] ?? `the plaza server said no (${json.error ?? response.status})`);
+  return json;
 }
 
 /** Every backend call waits for sign-in; failures surface on the blocker screen, not as page errors. */
 const call = (fn) => (...args) => session.then((s) => fn(s, ...args));
 
-const friends = new Map(); // code → recipe, session only until phase 04
+const friends = new Map(); // code → recipe as last rendered (the room and the away list are the sources)
 
 const backend = {
   GetVersion: call(() => "activity"),
@@ -57,13 +78,17 @@ const backend = {
   Rescan: call(() => {}),
 
   GetAvatarDnaJson: call((s) => JSON.stringify(s.dna)),
-  // Shape-checked here for the session; phase 04 moves validation and storage to the server.
-  SaveAvatarDnaJson: call((s, json) => {
-    let next;
-    try { next = JSON.parse(json); } catch { return ""; }
-    if (!next || typeof next !== "object" || json.length > 1024) return "";
-    s.dna = { ...s.dna, ...next, v: 1, id: "local", name: gamertag(next.name ?? s.dna.name) };
-    return JSON.stringify(s.dna);
+  // The Worker validates and stores; the page renders whatever it accepted ("" = rejected, page reverts).
+  SaveAvatarDnaJson: call(async (s, json) => {
+    let dna;
+    try { dna = JSON.parse(json); } catch { return ""; }
+    try {
+      s.dna = (await api(s, "/avatar", { method: "PUT", body: { dna } })).dna;
+      return JSON.stringify(s.dna);
+    } catch (err) {
+      console.warn("avatar not saved", err.message);
+      return "";
+    }
   }),
   InspectAvatar: call((s, json) => {
     const dna = JSON.parse(json);
@@ -74,7 +99,13 @@ const backend = {
   }),
 
   GetFriendCode: call((s) => friendCode(s.member.discordId)),
-  GetFriendsJson: call(() => JSON.stringify([...friends].map(([code, dna]) => ({ code, lastSeen: new Date().toISOString(), dna })))),
+  // Members of this server who were in the plaza in the last 30 days; they nap until they join (awayAsleep).
+  GetFriendsJson: call(async (s) => {
+    const { members } = await api(s, "/plaza/members");
+    for (const m of members) friends.set(m.code, m.dna);
+    return JSON.stringify(members);
+  }),
+  // Recipes from the room were normalised by the Worker; pin the id to the seat they arrived on.
   RememberFriend: call((s, code, json) => { const dna = { ...JSON.parse(json), id: `friend_${code}` }; friends.set(code, dna); return JSON.stringify(dna); }),
   ForgetFriend: call((s, code) => friends.delete(code)),
 
@@ -115,6 +146,14 @@ window.XboxHostAdapter = {
   name: "discord",
   blades: BLADES,
   backend,
+  awayAsleep: true,
+  /** Called by main.js after HOST_READY (so sign-in is done): the shared room for this Activity instance. */
+  createTransport() {
+    const s = current;
+    const params = new URLSearchParams({ guild: s.sdk.guildId ?? "", instance: s.sdk.instanceId });
+    const scheme = location.protocol === "https:" ? "wss" : "ws";
+    return new RoomTransport({ url: `${scheme}://${location.host}${API}/room?${params}`, token: s.token, getDna: () => s.dna });
+  },
   post({ type, payload }) {
     if (type === "KEY" && KEYS[payload?.key]) emit(...KEYS[payload.key]);
     else if (type === "JS_ERROR") console.error("page error", payload);

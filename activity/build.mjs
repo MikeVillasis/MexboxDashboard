@@ -3,6 +3,9 @@
 //   app.js           main.js + three.js bundled into one module (no inline import map, fewer proxied requests)
 //   discord-host.js  the Discord adapter + SDK, a classic script that must run before bridge.js
 //   bridge.js, css/, sounds/ copied as-is; index.html rewritten to load the above.
+//
+// --dev builds activity/dist-dev with dev/fake-sdk.js in place of the Discord SDK, for tools/activity-dev (local
+// multi-user testing in a browser). The production build compiles the dev branches away.
 import * as esbuild from "esbuild";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -10,7 +13,8 @@ import path from "node:path";
 const here = import.meta.dirname;
 const assets = path.join(here, "..", "src", "Dashboard.App", "WebAssets");
 const sounds = path.join(here, "..", "src", "Dashboard.App", "Assets", "Sounds");
-const dist = path.join(here, "dist");
+const dev = process.argv.includes("--dev");
+const dist = path.join(here, dev ? "dist-dev" : "dist");
 
 /** Resolves the import-map names ("three", "three/addons/...") to the vendored copies. */
 const vendoredThree = {
@@ -43,6 +47,8 @@ await esbuild.build({
   entryPoints: [path.join(here, "src", "discord-host.js")],
   outfile: path.join(dist, "discord-host.js"),
   bundle: true, format: "iife", minify: true, sourcemap: true, target: "es2022", logLevel: "warning",
+  define: { DEV_SDK: String(dev) },
+  alias: dev ? { "@discord/embedded-app-sdk": path.join(here, "dev", "fake-sdk.js") } : {},
 });
 
 await cp(path.join(assets, "js", "bridge.js"), path.join(dist, "bridge.js"));
@@ -63,4 +69,4 @@ html = rewrite(html, "<title>xbox 360 dashboard</title>", "<title>mexbox plaza</
 await writeFile(path.join(dist, "index.html"), html);
 
 const size = async (f) => ((await readFile(path.join(dist, f))).length / 1024).toFixed(0);
-console.log(`activity/dist built: app.js ${await size("app.js")} KiB, discord-host.js ${await size("discord-host.js")} KiB`);
+console.log(`activity/${path.basename(dist)} built: app.js ${await size("app.js")} KiB, discord-host.js ${await size("discord-host.js")} KiB`);

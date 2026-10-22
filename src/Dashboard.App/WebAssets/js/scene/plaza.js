@@ -90,8 +90,9 @@ export class Plaza {
     return this.local;
   }
 
-  /// A friend's avatar: spawned once, re-dressed on DNA updates. Offline friends roam as NPCs; live ones follow their peer.
-  async upsertFriend(dna, { live = false, x, z } = {}) {
+  /// A friend's avatar: spawned once, re-dressed on DNA updates. Offline friends roam as NPCs (or nap, when the host
+  /// asks for asleep); live ones follow their peer and are woken up.
+  async upsertFriend(dna, { live = false, asleep = false, x, z } = {}) {
     let avatar = this.avatars.get(dna.id);
     if (avatar) {
       await avatar.applyDna(dna);
@@ -104,6 +105,7 @@ export class Plaza {
       this.avatars.set(dna.id, avatar);
       this.ai.add(avatar);
     }
+    this.ai.setAsleep(avatar, asleep && !live);
     this.ai.setRemote(avatar, live);
     if (live && x !== undefined) this.ai.walkTo(avatar, x, z);
     return avatar;
@@ -163,7 +165,8 @@ export class Plaza {
     if (event.button !== 0) return;
     this.setPointer(event);
     const avatar = this.pickAvatar();
-    if (avatar && this.ai.get(avatar)?.remote) { // live friends can be inspected but not carried off (it would desync them)
+    const agent = avatar && this.ai.get(avatar);
+    if (agent && (agent.remote || agent.asleep)) { // live friends would desync, nappers stay put: inspect only
       avatar.face.express("happy", 1.2);
       this.callbacks.avatarClick?.(avatar.dna);
       return;

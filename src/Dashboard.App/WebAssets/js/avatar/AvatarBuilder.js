@@ -82,7 +82,9 @@ export class Avatar {
     this.rig = kit.createRig(this.root);
     this.time = Math.random() * 10;
     // Motion state written by the plaza AI each frame and read by the kit's procedural animation.
-    this.motion = { walk: 0, walkPhase: 0, gesture: null, gestureTime: 0, dangle: 0 };
+    this.motion = { walk: 0, walkPhase: 0, gesture: null, gestureTime: 0, dangle: 0, sleep: 0 };
+    this.asleep = false;
+    this.snore = null; // floating "z z" sprite, created on first nap
   }
 
   get id() { return this.dna?.id; }
@@ -129,6 +131,17 @@ export class Avatar {
     }
   }
 
+  /// Napping (away members): sits down, closes eyes, floats a "z z". The pose blends in and out in update().
+  setAsleep(asleep) {
+    this.asleep = asleep;
+    this.face.sleeping = asleep;
+    if (asleep && !this.snore) {
+      this.snore = new THREE.Sprite(new THREE.SpriteMaterial({ map: snoreTexture(), transparent: true, depthWrite: false, opacity: 0 }));
+      this.snore.scale.set(0.42, 0.21, 1);
+      this.root.add(this.snore);
+    }
+  }
+
   /// Plays a gesture ("wave" | "laugh" | "nod") once; the face reacts to match.
   gesture(name) {
     this.onGesture?.(name); // the local avatar's gestures are broadcast to peers
@@ -146,6 +159,12 @@ export class Avatar {
     if (m.gesture) {
       m.gestureTime += dt;
       if (m.gestureTime > GESTURE_SECONDS[m.gesture]) m.gesture = null;
+    }
+    m.sleep = this.asleep ? Math.min(1, m.sleep + dt * 0.8) : Math.max(0, m.sleep - dt * 2);
+    if (this.snore) {
+      this.snore.material.opacity = Math.max(0, m.sleep - 0.5) * 2 * (0.65 + Math.sin(this.time * 1.6) * 0.35);
+      this.snore.position.set(0.18, 1.32 + Math.sin(this.time * 0.8) * 0.05, 0.05);
+      this.snore.visible = this.snore.material.opacity > 0.01;
     }
     this.face.update(dt);
     this.kit.animate(this.rig, this.time, m);
@@ -299,7 +318,50 @@ class ProceduralKit {
       b.shin_R.rotation.x = (0.4 - Math.sin(t * 7 + 1) * 0.3) * d;
       b.head.rotation.z = Math.sin(t * 2.5) * 0.25 * d;
     }
+
+    // Asleep (away members): sitting on the floor, legs out, slumped forward, slow breathing.
+    if (m.sleep > 0.001) {
+      const s = m.sleep;
+      const breathe = Math.sin(t * 1.1) * 0.03;
+      b.hips.position.y = lerp(b.hips.position.y, 0.2, s);
+      b.thigh_L.rotation.x = lerp(b.thigh_L.rotation.x, -1.45, s);
+      b.thigh_R.rotation.x = lerp(b.thigh_R.rotation.x, -1.45, s);
+      b.thigh_L.rotation.z = lerp(b.thigh_L.rotation.z, 0.12, s);
+      b.thigh_R.rotation.z = lerp(b.thigh_R.rotation.z, -0.12, s);
+      b.shin_L.rotation.x = lerp(b.shin_L.rotation.x, 0.3, s);
+      b.shin_R.rotation.x = lerp(b.shin_R.rotation.x, 0.3, s);
+      b.spine.rotation.x = lerp(b.spine.rotation.x, 0.25, s);
+      b.chest.rotation.x = lerp(b.chest.rotation.x, 0.2 + breathe, s);
+      b.head.rotation.x = lerp(b.head.rotation.x, 0.5, s);
+      b.head.rotation.y *= 1 - s;
+      b.head.rotation.z = lerp(b.head.rotation.z, 0.15, s);
+      b.upperArm_L.rotation.x = lerp(b.upperArm_L.rotation.x, -0.55, s);
+      b.upperArm_R.rotation.x = lerp(b.upperArm_R.rotation.x, -0.55, s);
+      b.foreArm_L.rotation.x = lerp(b.foreArm_L.rotation.x, -0.6, s);
+      b.foreArm_R.rotation.x = lerp(b.foreArm_R.rotation.x, -0.6, s);
+    }
   }
+}
+
+/// Shared "z z" texture for napping avatars (drawn once).
+let snoreMap = null;
+function snoreTexture() {
+  if (snoreMap) return snoreMap;
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#ffffff";
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.45)";
+  ctx.lineWidth = 4;
+  for (const [text, x, y, size] of [["z", 18, 54, 26], ["z", 52, 40, 32], ["Z", 88, 30, 40]]) {
+    ctx.font = `600 ${size}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+  }
+  snoreMap = new THREE.CanvasTexture(canvas);
+  snoreMap.colorSpace = THREE.SRGBColorSpace;
+  return snoreMap;
 }
 
 // ── Geometry helpers (all in bind-pose avatar space, rigidly weighted to one bone each) ──

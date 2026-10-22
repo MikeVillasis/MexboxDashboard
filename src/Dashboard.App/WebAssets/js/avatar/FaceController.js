@@ -42,6 +42,7 @@ export class FaceController {
     this.eyeStyle = eyeStyle;
     this.mouthStyle = mouthStyle;
     this.mood = "neutral";          // neutral | happy | surprised
+    this.sleeping = false;          // eyes shut until woken (napping away members)
     this.moodUntil = 0;
     this.blinkAt = 1 + Math.random() * 3;
     this.blinkUntil = 0;
@@ -69,6 +70,8 @@ export class FaceController {
     this.time += dt;
     const t = this.time;
     if (this.mood !== "neutral" && t > this.moodUntil) this.mood = "neutral";
+
+    if (this.sleeping) { this.apply(EYE.closed, MOUTH.neutral); return; }
 
     // Blink: closed for ~120 ms, half-lids on either side, every 2–6 s.
     if (t > this.blinkAt) { this.blinkUntil = t + 0.16; this.blinkAt = t + 2 + Math.random() * 4; }

@@ -71,6 +71,11 @@ Windows app (Dashboard.App)
 - **Windows PC unavailable for now:** do the Discord-side work first (01 JS-only, 02-05, server halves of 06-08).
   Desktop pieces wait; anything touching `Dashboard.App` is unverified until it's tested on Windows.
 
+- **Room access is checked per server, not per Activity instance** (phase 04). Discord's activity-instance endpoint
+  needs a bot token, a second high-value secret; everyone who can reach a room is already a verified member of the
+  allowlisted server, and room contents (avatars, moves) are server-visible anyway. Instance ids only pick the room.
+- **Rate limit counts Discord calls, not API calls** (phase 04): 60/min per IP on token exchange and uncached sign-in
+  checks; members may share Discord's proxy IP, and a launch makes several API calls but only ~2 Discord calls.
 - **Front end served by the Worker** (Workers static assets) instead of Pages: one origin, one Discord URL mapping,
   one deploy. Decided in phase 03.
 
@@ -80,8 +85,8 @@ Threat model: keep server data (members, avatars, libraries) inside the allowed 
    app gets added to another server.
 2. **Identity is verified server-side, never trusted from the client.** The client sends its Discord access token;
    the Worker resolves the user with `/users/@me` and guild membership with `/users/@me/guilds/{id}/member`
-   (scope `guilds.members.read`), and caches the result briefly. Room joins also check the user is in that
-   activity instance (Discord's activity-instance endpoint).
+   (scope `guilds.members.read`), and caches the result briefly. Room sockets authenticate with the same check in
+   their first message (the token never goes in a URL); see Decisions for why the instance itself isn't verified.
 3. **Minimal scopes:** `identify`, `guilds.members.read`. The app cannot read messages, channels or member lists
    beyond the people in it.
 4. **Secrets:** client secret and token pepper only in `wrangler secret`, never in the repo or front end.

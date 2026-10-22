@@ -8,8 +8,10 @@
 //   webview2  the Windows app: C# XboxHostBridge (AddHostObjectToScript "xboxBackend"), envelopes via
 //             PostWebMessageAsJson / WebMessageDispatcher. Picked automatically when window.chrome.webview exists.
 //   adapter   any other host (Discord Activity, browser stub) sets window.XboxHostAdapter before this script runs:
-//             { name, backend, post(envelope), listen(fn(envelope)), blades? }
+//             { name, backend, post(envelope), listen(fn(envelope)), blades?, createTransport?, awayAsleep? }
 //             blades: names of the blades this host supports (omitted = all of them).
+//             createTransport(friendCode): a plaza transport (js/net/PeerTransport.js contract); omitted = PeerJS P2P.
+//             awayAsleep: friends who aren't connected nap in place instead of roaming as NPCs.
 //
 // BACKEND CONTRACT (method names match C# XboxHostBridge; a host may leave out what it can't do, callers use ?.):
 //   GetVersion GetLibraryJson GetSettingsJson GetProfileJson FocusGame(id) LaunchGame(id) Rescan
@@ -54,6 +56,8 @@
     isHosted: Boolean(host),
     host: host ? host.name : null,
     blades: (host && host.blades) || null,
+    createTransport: host && host.createTransport ? (code) => host.createTransport(code) : null,
+    awayAsleep: Boolean(host && host.awayAsleep),
 
     backend: host ? host.backend : null,
 

@@ -26,8 +26,16 @@ allowlist and (later) the plaza rooms. See `.scratch/discord-activity/spec.md`.
   screen over the plaza); copy `.dev.vars.example` to `.dev.vars` first.
 - `npm --prefix ../activity test`: unit tests for the Activity's identity helpers.
 - Front-end work without Discord: `python3 ../tools/web-stub/serve.py` (stub host, all blades).
+- Whole Activity locally, several members, no Discord or Cloudflare account: `node ../tools/activity-dev/dev.mjs`, then
+  open `http://localhost:8787/?user=ana&guild=111111111111111111&instance=room1` and the same with `user=ben` in
+  another tab (fake Discord API + `activity/dev/fake-sdk.js`; `user=outsider` is in no server).
 
 ## Endpoints (also reachable with Discord's `/.proxy` prefix)
+All except token/health need `Authorization: Bearer <token>` and `X-Guild-Id`.
+- `GET /api/avatar` → `{dna|null}`; `PUT /api/avatar {dna}` → the normalised recipe (rules mirror C# `AvatarDna`).
+- `GET /api/plaza/members` → members of your server seen in the last 30 days with an avatar (friend code + recipe only).
+- `GET /api/room?guild=&instance=` (WebSocket) → the shared plaza for that Activity instance (`src/room.ts`); the first
+  message must be `AUTH {token, dna, x, z}`.
 - `POST /api/token {code, guildId}` → `{access_token, expires_in, scope, member}`; only for members of an allowlisted guild.
 - `GET /api/me` with `Authorization: Bearer <token>` and `X-Guild-Id` → the verified member.
 - `GET /api/health`

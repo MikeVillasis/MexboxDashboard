@@ -4,6 +4,8 @@ export interface Env {
   ASSETS: Fetcher;
   /** Per-IP limiter for API calls that reach Discord (wrangler.toml [[ratelimits]]). */
   DISCORD_CALLS: RateLimit;
+  /** One PlazaRoom Durable Object per Activity instance. */
+  ROOMS: DurableObjectNamespace<import("./room").PlazaRoom>;
   DISCORD_CLIENT_ID: string;
   DISCORD_CLIENT_SECRET: string;
   ALLOWED_GUILD_IDS?: string;

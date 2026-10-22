@@ -5,6 +5,7 @@
 //     │               └─within 2 m of a free avatar──▶ SOCIALIZE (both) ──timer──▶ IDLE (+ cooldown for that pair)
 //     └──random──▶ EMOTE ──gesture done──▶ IDLE
 //   any ──pointer grab──▶ GRABBED ──drop──▶ IDLE, or SOCIALIZE with whoever it was dropped next to
+//   asleep (a host flag for away members): sits and naps in place, ignores everything until woken
 //
 // Everything here is local simulation; phase 5 only syncs movement targets/emotes between peers.
 import * as THREE from "three";
@@ -37,13 +38,14 @@ class Agent {
     this.nextGestureAt = 0;
     this.anchored = false;        // local avatar while the customiser is open: stays home, facing the camera
     this.remote = false;          // a live friend: moves only to targets their peer sends (MOVE packets)
+    this.asleep = false;          // an away member napping where they are (hosts that opt in, e.g. the Discord Activity)
     this.dropTarget = null;
     this.fall = 0;                // vertical speed after a drop
   }
 
   get id() { return this.avatar.id; }
   get position() { return this.avatar.root.position; }
-  get busy() { return this.state === State.SOCIALIZE || this.state === State.GRABBED || this.anchored || this.remote; }
+  get busy() { return this.state === State.SOCIALIZE || this.state === State.GRABBED || this.anchored || this.remote || this.asleep; }
 }
 
 export class PlazaAI {
@@ -71,6 +73,17 @@ export class PlazaAI {
     this.endSocial(agent);
     agent.state = State.IDLE;
     agent.timer = remote ? Infinity : 2;
+  }
+
+  /// Away members nap in place; waking hands them back to normal AI (or to their peer, via setRemote).
+  setAsleep(avatar, asleep) {
+    const agent = this.get(avatar);
+    if (!agent || agent.asleep === asleep) return;
+    agent.asleep = asleep;
+    this.endSocial(agent);
+    agent.state = State.IDLE;
+    agent.timer = asleep ? Infinity : 2;
+    avatar.setAsleep(asleep);
   }
 
   /// Walk an agent to a point: a MOVE packet for remotes, a floor click for the local avatar.
@@ -122,7 +135,7 @@ export class PlazaAI {
     let nearest = null;
     let best = SOCIAL_RANGE * 1.25;
     for (const other of this.agents.values()) {
-      if (other === agent || other.state === State.GRABBED || other.anchored || other.remote) continue;
+      if (other === agent || other.state === State.GRABBED || other.anchored || other.remote || other.asleep) continue;
       const d = flatDistance(agent.position, other.position);
       if (d < best) { best = d; nearest = other; }
     }
@@ -146,6 +159,8 @@ export class PlazaAI {
   think(agent, dt) {
     agent.timer -= dt;
     const avatar = agent.avatar;
+
+    if (agent.asleep) return;
 
     if (agent.remote) {
       // Peer-driven: arrive and wait for the next MOVE; never wander, emote or chat on our own initiative.
@@ -272,6 +287,12 @@ export class PlazaAI {
       return;
     }
 
+    if (agent.asleep) {
+      agent.velocity.set(0, 0);
+      motion.walk = Math.max(0, motion.walk - dt * 6);
+      return;
+    }
+
     // Steering: seek the target (wander) or a chatting distance from the partner, plus separation.
     const desired = new THREE.Vector2();
     if (agent.state === State.WANDER) {
@@ -317,7 +338,7 @@ export class PlazaAI {
 const ORIGIN = new THREE.Vector3();
 
 function isFree(agent) {
-  return (agent.state === State.IDLE || agent.state === State.WANDER) && !agent.anchored && !agent.remote && agent.position.y === 0;
+  return (agent.state === State.IDLE || agent.state === State.WANDER) && !agent.anchored && !agent.remote && !agent.asleep && agent.position.y === 0;
 }
 
 function pickWanderTarget(agent) {
