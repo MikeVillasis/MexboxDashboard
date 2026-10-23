@@ -466,6 +466,8 @@ kbd {
   backdrop-filter: blur(20px);
   animation: settle 0.26s var(--ease-out);
 }
+/* A profile photo (when the host supplies one) replaces the silhouette, framed in the card's colour. */
+.gamercard-picture.photo { background-size: cover; background-position: center; box-shadow: 0 0 0 3px var(--card-color, #fff); }
 .gamercard-picture {
   width: 128px; height: 128px; border-radius: 10px;
   background: radial-gradient(circle at 50% 35%, var(--card-color, #9bf00b) 0 22%, transparent 23%),

@@ -410,16 +410,22 @@ export class Dashboard extends EventTarget {
   /// Without a card: the local profile. With one: the summary C# built for a clicked plaza avatar.
   async openGamercard(card = null) {
     let stats;
+    let picture = null; // a host may supply a profile photo URL (the Discord Activity); otherwise the silhouette shows
+    const frame = document.querySelector(".gamercard-picture");
     if (card) {
       $("gc-gamertag").textContent = card.gamertag;
       stats = Object.entries(card.stats ?? {});
-      document.querySelector(".gamercard-picture").style.setProperty("--card-color", card.color);
+      frame.style.setProperty("--card-color", card.color);
+      picture = card.picture ?? null;
     } else {
       const profile = JSON.parse(await this.backend.GetProfileJson());
       $("gc-gamertag").textContent = profile.gamertag;
       stats = [["games", profile.games], ["launches", profile.launches], ["last played", profile.lastPlayed ?? "—"]];
-      document.querySelector(".gamercard-picture").style.setProperty("--card-color", this.dna?.shirtColor ?? "#9bf00b");
+      frame.style.setProperty("--card-color", this.dna?.shirtColor ?? "#9bf00b");
+      picture = profile.picture ?? null;
     }
+    frame.classList.toggle("photo", Boolean(picture));
+    frame.style.backgroundImage = picture ? `url("${picture}")` : "";
     $("gc-stats").replaceChildren(...stats.flatMap(([k, v]) => {
       const dt = document.createElement("dt"); dt.textContent = k;
       const dd = document.createElement("dd"); dd.textContent = v;

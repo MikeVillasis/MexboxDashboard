@@ -2,7 +2,7 @@ import { authenticate, clientIp } from "./auth";
 import { allowedGuilds, allowedOrigins, type Env } from "./env";
 import { HttpError, isSnowflake, json, readJson } from "./http";
 import { exchangeCode } from "./oauth";
-import { getAvatar, getMembers, putAvatar } from "./plaza";
+import { getAvatar, getAvatarImage, getMembers, putAvatar } from "./plaza";
 
 export { PresenceHub } from "./presence-hub";
 export { PlazaRoom } from "./room";
@@ -64,6 +64,7 @@ async function route(pathname: string, request: Request, env: Env): Promise<Resp
   if (pathname === "/api/avatar" && request.method === "GET") return getAvatar(request, env);
   if (pathname === "/api/avatar" && request.method === "PUT") return putAvatar(request, env);
   if (pathname === "/api/plaza/members" && request.method === "GET") return getMembers(request, env);
+  if (pathname.startsWith("/api/avatar-image/") && request.method === "GET") return getAvatarImage(request, env, pathname.slice(18));
 
   // The shared plaza: one room per Activity instance. Browsers can't set headers on a WebSocket, so the token arrives
   // in the first message (never in the URL, which could end up in logs) and the room verifies it.

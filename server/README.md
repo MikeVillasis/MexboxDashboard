@@ -45,6 +45,8 @@ Without the token the hub never connects and nobody gets bubbles; everything els
 ## Endpoints (also reachable with Discord's `/.proxy` prefix)
 All except token/health need `Authorization: Bearer <token>` and `X-Guild-Id`.
 - `GET /api/avatar` → `{dna|null}`; `PUT /api/avatar {dna}` → the normalised recipe (rules mirror C# `AvatarDna`).
+- `GET /api/avatar-image/:code` → a member's Discord profile picture (server avatar, else user avatar, else Discord's
+  default), only for members of your own server; images come from Discord's CDN, cached by Cloudflare.
 - `GET /api/plaza/members` → members of your server seen in the last 30 days with an avatar (friend code + recipe only).
 - `GET /api/room?guild=&instance=` (WebSocket) → the shared plaza for that Activity instance (`src/room.ts`); the first
   message must be `AUTH {token, dna, x, z}`. Rooms also relay `STATUS {code, status}` from `src/presence-hub.ts` (one

@@ -19,6 +19,8 @@ const USERS: Record<string, [string, string, string]> = {
   "token-out": ["300000000000000009", OTHER_GUILD, "Outsider"],
 };
 const testEnv = env as unknown as Env & { TEST_MIGRATIONS: D1Migration[] };
+const ANA_AVATAR = "0123456789abcdef0123456789abcdef";
+const BEN_GUILD_AVATAR = "a_fedcba9876543210fedcba9876543210";
 const DNA = { v: 1, id: "local", name: "Ana", skinColor: "#e0ac69", headId: 1, hairId: 2, hairColor: "#2C1B18", torsoId: 0, shirtColor: "#107C10", legsId: 0, legsColor: "#2B3A55", eyeUV: 0, mouthUV: 0 };
 
 const call = (path: string, init: RequestInit = {}) => worker.fetch(new Request(`https://api.test${path}`, init), testEnv);
@@ -27,13 +29,22 @@ const auth = (token: string) => ({ authorization: `Bearer ${token}`, "x-guild-id
 function mockDiscord() {
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
+    // Fake CDN: answers with the URL it was asked for, so tests can see which picture was chosen.
+    if (url.startsWith("https://cdn.discordapp.com/")) {
+      if (url.includes("broken")) return new Response("nope", { status: 404 });
+      return new Response(url, { headers: { "content-type": "image/png" } });
+    }
     const member = url.match(/\/users\/@me\/guilds\/(\d+)\/member$/);
     if (!member) return new Response("unexpected", { status: 500 });
     const token = new Headers(init?.headers).get("authorization")?.slice(7) ?? "";
     const user = USERS[token];
     if (!user) return new Response("{}", { status: 401 });
     if (user[1] !== member[1]) return new Response("{}", { status: 404 });
-    return Response.json({ nick: null, user: { id: user[0], username: user[2].toLowerCase(), global_name: user[2] } });
+    return Response.json({
+      nick: null,
+      avatar: token === "token-ben" ? BEN_GUILD_AVATAR : null,
+      user: { id: user[0], username: user[2].toLowerCase(), global_name: user[2], avatar: token === "token-ana" ? ANA_AVATAR : null },
+    });
   });
 }
 
@@ -280,5 +291,41 @@ describe("thought bubbles in the room", () => {
     await presence(GUILD, USERS["token-cy"][0], [{ type: 0, name: "Tetris" }]);
     await ana.next("STATUS", (m) => m.status?.text === "Tetris");
     expect(ana.inbox.some((m) => m.status?.text === "Secret Game")).toBe(false);
+  });
+});
+
+// ───────────── Profile pictures (gamercards) ─────────────
+
+describe("profile pictures", () => {
+  const picture = (code: string, token = "token-ana") => call(`/api/avatar-image/${code}`, { headers: auth(token) });
+  const [ANA, BEN, CY, OUT] = ["token-ana", "token-ben", "token-cy", "token-out"].map((t) => USERS[t][0]);
+
+  beforeEach(async () => { for (const token of ["token-ana", "token-ben", "token-cy"]) await call("/api/me", { headers: auth(token) }); });
+
+  it("serves a member's own Discord avatar, preferring their server avatar, else Discord's default", async () => {
+    const ana = await picture(friendCode(ANA));
+    expect(ana.status).toBe(200);
+    expect(ana.headers.get("content-type")).toBe("image/png");
+    expect(await ana.text()).toBe(`https://cdn.discordapp.com/avatars/${ANA}/${ANA_AVATAR}.png?size=256`);
+    expect(await (await picture(friendCode(BEN))).text()).toBe(`https://cdn.discordapp.com/guilds/${GUILD}/users/${BEN}/avatars/${BEN_GUILD_AVATAR}.png?size=256`);
+    expect(await (await picture(friendCode(CY))).text()).toMatch(/^https:\/\/cdn\.discordapp\.com\/embed\/avatars\/[0-5]\.png$/);
+  });
+
+  it("falls back to the default avatar when the CDN doesn't have the picture", async () => {
+    await testEnv.DB.prepare("UPDATE members SET avatar_hash = ?1 WHERE discord_id = ?2").bind("broken", ANA).run();
+    // "broken" isn't a valid hash on sign-in, but simulate a stale row the CDN no longer serves.
+    expect(await (await picture(friendCode(ANA))).text()).toMatch(/embed\/avatars\/[0-5]\.png$/);
+  });
+
+  it("only finds members of your own server, and needs a signed-in member", async () => {
+    await call("/api/me", { headers: { ...auth("token-out"), "x-guild-id": OTHER_GUILD } });
+    expect((await picture(friendCode(OUT))).status).toBe(404); // exists, but in another server
+    expect((await call(`/api/avatar-image/${friendCode(ANA)}`)).status).toBe(401);
+    expect((await picture("bad!!")).status).toBe(400);
+  });
+
+  it("never stores anything but well-formed hashes", async () => {
+    const row = await testEnv.DB.prepare("SELECT avatar_hash, guild_avatar_hash FROM members WHERE discord_id = ?1").bind(BEN).first();
+    expect(row).toEqual({ avatar_hash: null, guild_avatar_hash: BEN_GUILD_AVATAR });
   });
 });

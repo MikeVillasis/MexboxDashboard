@@ -45,3 +45,33 @@ export async function getMembers(request: Request, env: Env): Promise<Response> 
   }
   return json({ members });
 }
+
+const CDN = "https://cdn.discordapp.com";
+const CODE = /^[A-HJ-NP-Z2-9]{6}$/;
+
+/**
+ * A member's Discord profile picture for gamercards, looked up by friend code within the caller's own server only.
+ * Served from our origin (Discord's sandbox may block its CDN in Activities, and Discord ids never reach the page);
+ * Cloudflare caches the CDN fetch. Falls back to Discord's default avatar.
+ */
+export async function getAvatarImage(request: Request, env: Env, code: string): Promise<Response> {
+  const me = await authenticate(request, env);
+  if (!CODE.test(code)) throw new HttpError(400, "bad_code");
+  const { results } = await env.DB.prepare("SELECT discord_id, avatar_hash, guild_avatar_hash FROM members WHERE guild_id = ?1")
+    .bind(me.guildId).all<{ discord_id: string; avatar_hash: string | null; guild_avatar_hash: string | null }>();
+  const row = results.find((r) => friendCode(r.discord_id) === code);
+  if (!row) throw new HttpError(404, "not_found");
+
+  const fallback = `${CDN}/embed/avatars/${Number((BigInt(row.discord_id) >> 22n) % 6n)}.png`;
+  const url = row.guild_avatar_hash
+    ? `${CDN}/guilds/${me.guildId}/users/${row.discord_id}/avatars/${row.guild_avatar_hash}.png?size=256`
+    : row.avatar_hash ? `${CDN}/avatars/${row.discord_id}/${row.avatar_hash}.png?size=256` : fallback;
+
+  const cached = { cf: { cacheEverything: true, cacheTtl: 86400 } } as RequestInit;
+  let image = await fetch(url, cached);
+  if (!image.ok && url !== fallback) image = await fetch(fallback, cached);
+  if (!image.ok) throw new HttpError(502, "image_unavailable");
+  return new Response(image.body, {
+    headers: { "content-type": image.headers.get("content-type") ?? "image/png", "cache-control": "private, max-age=3600" },
+  });
+}

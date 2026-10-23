@@ -74,7 +74,9 @@ const backend = {
   GetVersion: call(() => "activity"),
   GetLibraryJson: call(() => "[]"),
   GetSettingsJson: call(() => JSON.stringify({ soundEnabled: sound.enabled, lastGameId: null })),
-  GetProfileJson: call((s) => JSON.stringify({ gamertag: s.dna.name, games: 0, launches: 0, lastPlayed: null })),
+  GetProfileJson: call(async (s) => JSON.stringify({
+    gamertag: s.dna.name, games: 0, launches: 0, lastPlayed: null, picture: await pictureFor(s, friendCode(s.member.discordId)),
+  })),
   FocusGame: call(() => {}),
   LaunchGame: call(() => false),
   Rescan: call(() => {}),
@@ -92,13 +94,16 @@ const backend = {
       return "";
     }
   }),
-  InspectAvatar: call((s, json) => {
+  InspectAvatar: call(async (s, json) => {
     const dna = JSON.parse(json);
     const local = dna.id === "local";
+    // Members have a friend code (yours, or friend_CODE); the plaza's resident NPCs don't, so they keep the silhouette.
+    const code = local ? friendCode(s.member.discordId) : /^friend_([A-Z0-9]{6})$/.exec(dna.id ?? "")?.[1];
     emit("OPEN_GAMERCARD", { card: { gamertag: dna.name, color: dna.shirtColor, local,
+      picture: code ? await pictureFor(s, code) : null,
       stats: {
         ...(local ? { status: "in the plaza", "signed in as": s.member.displayName } : { status: "plaza resident", zone: "this server" }),
-        ...cardStatus(local ? friendCode(s.member.discordId) : dna.id?.replace(/^friend_/, "")),
+        ...cardStatus(code),
       } } });
     return true;
   }),
@@ -123,6 +128,21 @@ const backend = {
   MediaNext: call(() => {}),
   MediaPrevious: call(() => {}),
 };
+
+/**
+ * A member's Discord profile picture as a page-local URL. Fetched once per friend code with your sign-in (the Worker
+ * only serves members of your server) and kept for the session; null if it can't be loaded.
+ */
+const pictures = new Map(); // code → Promise<string | null>
+function pictureFor(s, code) {
+  if (!pictures.has(code)) {
+    pictures.set(code, fetch(`${API}/avatar-image/${code}`, { headers: { authorization: `Bearer ${s.token}`, "x-guild-id": s.sdk.guildId ?? "" } })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => (blob ? URL.createObjectURL(blob) : null))
+      .catch(() => null));
+  }
+  return pictures.get(code);
+}
 
 /** Gamercard line for a member's current Discord activity, if any. */
 function cardStatus(code) {

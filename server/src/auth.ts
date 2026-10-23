@@ -51,7 +51,11 @@ export async function verifyMember(env: Env, accessToken: string, guildId: unkno
   if (response.status === 429) throw new HttpError(503, "discord_busy");
   if (!response.ok) throw new HttpError(502, "discord_error");
 
-  const body = (await response.json()) as { nick?: string | null; user?: { id?: string; username?: string; global_name?: string | null } };
+  const body = (await response.json()) as {
+    nick?: string | null;
+    avatar?: string | null; // server-specific avatar
+    user?: { id?: string; username?: string; global_name?: string | null; avatar?: string | null };
+  };
   const discordId = body.user?.id;
   if (!isSnowflake(discordId)) throw new HttpError(502, "discord_error");
   const member: Member = {
@@ -62,12 +66,17 @@ export async function verifyMember(env: Env, accessToken: string, guildId: unkno
 
   if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
   cache.set(key, { member, expires: Date.now() + CACHE_TTL_MS });
+  // Avatar hashes are refreshed on every sign-in, so a changed profile picture shows up next time they open the plaza.
   await env.DB.prepare(
-    `INSERT INTO members (guild_id, discord_id, display_name, last_seen) VALUES (?1, ?2, ?3, ?4)
-     ON CONFLICT (guild_id, discord_id) DO UPDATE SET display_name = excluded.display_name, last_seen = excluded.last_seen`,
-  ).bind(member.guildId, member.discordId, member.displayName, Date.now()).run();
+    `INSERT INTO members (guild_id, discord_id, display_name, last_seen, avatar_hash, guild_avatar_hash) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+     ON CONFLICT (guild_id, discord_id) DO UPDATE SET display_name = excluded.display_name, last_seen = excluded.last_seen,
+       avatar_hash = excluded.avatar_hash, guild_avatar_hash = excluded.guild_avatar_hash`,
+  ).bind(member.guildId, member.discordId, member.displayName, Date.now(), avatarHash(body.user?.avatar), avatarHash(body.avatar)).run();
   return member;
 }
+
+/** Discord image hashes: 32 hex characters, "a_"-prefixed when animated. Anything else is dropped. */
+export const avatarHash = (value: unknown) => (typeof value === "string" && /^(a_)?[0-9a-f]{32}$/.test(value) ? value : null);
 
 /** Test hook. */
 export const clearAuthCache = () => cache.clear();
