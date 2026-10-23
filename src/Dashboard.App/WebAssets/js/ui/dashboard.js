@@ -405,6 +405,35 @@ export class Dashboard extends EventTarget {
     }));
   }
 
+  // ───────────── Sky ─────────────
+
+  /// skies: [{ id, label }]; the button shows the current one, the dropdown ticks it. Picking one emits "skychange".
+  setSkies(skies, current) {
+    $("sky-current").textContent = skies.find((s) => s.id === current)?.label ?? current;
+    $("sky-list").replaceChildren(...skies.map(({ id, label }) => {
+      const li = document.createElement("li");
+      li.dataset.sky = id;
+      li.textContent = label;
+      li.setAttribute("role", "option");
+      li.setAttribute("aria-selected", String(id === current));
+      li.classList.toggle("selected", id === current);
+      return li;
+    }));
+  }
+
+  setSkyListOpen(open) {
+    $("sky-list").hidden = !open;
+    $("sky-button").setAttribute("aria-expanded", String(open));
+    if (open) $("sky-list").querySelector(".selected")?.scrollIntoView({ block: "nearest" });
+  }
+
+  /// Credit line for the current sky (static, trusted HTML from Sky.js), or null to hide it. Links go through the host.
+  setSkyCredit(html) {
+    const credit = $("sky-credit");
+    credit.hidden = !html;
+    credit.innerHTML = html ?? "";
+  }
+
   // ───────────── Gamercard ─────────────
 
   /// Without a card: the local profile. With one: the summary C# built for a clicked plaza avatar.
@@ -498,6 +527,26 @@ export class Dashboard extends EventTarget {
       const dy = e.clientY - swipe.y;
       swipe = null;
       if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 2) this.selectBlade(this.selected + (dx < 0 ? 1 : -1));
+    });
+
+    $("sky-button").addEventListener("click", () => { this.sound("Navigate"); this.setSkyListOpen($("sky-list").hidden); });
+    $("sky-list").addEventListener("click", (e) => {
+      const sky = e.target.closest("li")?.dataset.sky;
+      if (!sky) return;
+      this.sound("Select");
+      this.setSkyListOpen(false);
+      this.dispatchEvent(new CustomEvent("skychange", { detail: { name: sky } }));
+    });
+    // Clicking anywhere else closes the dropdown.
+    document.addEventListener("pointerdown", (e) => {
+      if (!$("sky-list").hidden && !e.target.closest("#sky-picker")) this.setSkyListOpen(false);
+    });
+    // External links (sky credits) open through the host: Discord's sandbox won't navigate away on its own.
+    $("sky-credit").addEventListener("click", (e) => {
+      const link = e.target.closest("a");
+      if (!link) return;
+      e.preventDefault();
+      this.dispatchEvent(new CustomEvent("openlink", { detail: { href: link.href } }));
     });
 
     $("collapse-ui").addEventListener("click", () => this.setCollapsed(true));

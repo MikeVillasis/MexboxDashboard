@@ -3,6 +3,7 @@ import { Dashboard } from "./ui/dashboard.js";
 import { Plaza } from "./scene/plaza.js";
 import { RESIDENTS } from "./avatar/residents.js";
 import { NetworkManager } from "./net/NetworkManager.js";
+import { DEFAULT_SKY, SKIES } from "./scene/Sky.js";
 
 const backend = Xbox.backend;
 const dashboard = new Dashboard(backend, { blades: Xbox.blades, inputHints: Xbox.inputHints, manualFriends: Xbox.manualFriends });
@@ -17,6 +18,23 @@ const plaza = new Plaza(document.getElementById("viewport-3d"), {
 }, { quality: Xbox.quality });
 
 dashboard.addEventListener("bladechange", (e) => plaza.setBlade(e.detail.blade));
+
+// Plaza sky: picked in the plaza menu, remembered per viewer (local storage may be unavailable: then it's per session).
+const SKY_KEY = "mexbox.sky";
+function applySky(name) {
+  const applied = plaza.setSky(name);
+  dashboard.setSkies(Object.entries(SKIES).map(([id, sky]) => ({ id, label: sky.label })), applied);
+  dashboard.setSkyCredit(SKIES[applied].credit?.html ?? null);
+  try { localStorage.setItem(SKY_KEY, applied); } catch { /* private mode / blocked storage */ }
+}
+applySky((() => { try { return localStorage.getItem(SKY_KEY); } catch { return null; } })() ?? DEFAULT_SKY);
+dashboard.addEventListener("skychange", (e) => applySky(e.detail.name));
+// The WebView2 host object answers any method name, so a missing OpenExternal shows up as a rejected call: fall back.
+dashboard.addEventListener("openlink", (e) => {
+  const open = () => window.open(e.detail.href, "_blank", "noopener");
+  if (!backend?.OpenExternal) { open(); return; }
+  Promise.resolve().then(() => backend.OpenExternal(e.detail.href)).catch(open);
+});
 dashboard.addEventListener("focusavatar", (e) => { if (!plaza.focusAvatar(e.detail.id) && e.detail.id) dashboard.toast("they haven't arrived in the plaza yet"); });
 // Collapsed: the plaza fills the screen, so a followed avatar is centred instead of framed beside the panel.
 dashboard.addEventListener("collapsechange", (e) => plaza.director.framing(!e.detail.collapsed));

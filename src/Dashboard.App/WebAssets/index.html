@@ -106,6 +106,14 @@
             <h3>residents</h3>
             <ul id="plaza-list" class="plain-list selectable"></ul>
             <p class="subtitle">friends you've met keep hanging out here when they're offline.</p>
+
+            <h3>sky</h3>
+            <div id="sky-picker" class="dropdown interactive">
+              <button id="sky-button" class="dropdown-button" aria-haspopup="listbox" aria-expanded="false">
+                <span id="sky-current"></span><i aria-hidden="true">&#x25BE;</i>
+              </button>
+              <ul id="sky-list" class="dropdown-list" role="listbox" hidden></ul>
+            </div>
           </div>
         </div>
       </section>
@@ -156,6 +164,9 @@
       <span data-hint="hide" hidden><kbd>h</kbd>hide menu</span>
       <span><kbd>g</kbd>gamercard</span>
     </footer>
+
+    <!-- Credit for the current sky preset, when it has one (bottom left of the plaza). -->
+    <div id="sky-credit" class="sky-credit interactive" hidden></div>
 
     <!-- Collapsed UI: only this handle stays, on the left edge, to bring the blades back. -->
     <button id="expand-ui" class="expand-handle interactive" hidden title="show the menu">menu &#x25B6;</button>

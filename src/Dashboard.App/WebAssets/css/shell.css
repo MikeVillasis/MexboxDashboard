@@ -138,6 +138,7 @@ button { font: inherit; color: inherit; }
 .side-panel::-webkit-scrollbar { width: 8px; }
 .side-panel::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.5); border-radius: 4px; }
 .side-panel h3 { margin: 0 0 10px; font-size: 20px; }
+.side-panel .subtitle + h3 { margin-top: 18px; } /* a heading after a note gets its own breathing room */
 .plain-list { list-style: none; margin: 0 0 18px; padding: 0; font-size: 18px; }
 .plain-list li { padding: 6px 0; display: flex; align-items: center; gap: 10px; }
 .plain-list .swatch { width: 14px; height: 14px; border-radius: 50%; box-shadow: 0 0 0 1px rgba(255,255,255,.7); }
@@ -422,6 +423,55 @@ kbd {
   text-transform: lowercase;
 }
 
+/* Dropdown (sky picker): the list opens in the panel's flow, so the scrolling panel never clips it, and scrolls itself
+   once there are more choices than fit. */
+.dropdown { margin-bottom: 18px; }
+.dropdown-button {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.22);
+  font-size: 17px;
+  cursor: pointer;
+}
+.dropdown-button:hover { background: rgba(255, 255, 255, 0.14); }
+.dropdown-button i { font-style: normal; transition: transform 0.2s; }
+.dropdown-button[aria-expanded="true"] i { transform: rotate(180deg); }
+.dropdown-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 4px;
+  max-height: 168px;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.32);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.55) transparent;
+}
+.dropdown-list li { display: flex; align-items: center; padding: 8px 10px; border-radius: 8px; font-size: 16px; cursor: pointer; }
+.dropdown-list li:hover { background: rgba(255, 255, 255, 0.14); }
+.dropdown-list li.selected { background: rgba(255, 255, 255, 0.24); }
+.dropdown-list li.selected::after { content: "\2713"; margin-left: auto; }
+
+/* Sky credit, bottom left of the plaza (above the hints; lower when they're hidden). */
+.sky-credit {
+  position: absolute;
+  left: 44px;
+  bottom: 58px;
+  font: 600 12px "Segoe UI", sans-serif;
+  color: rgba(255, 255, 255, 0.72);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  text-transform: none;
+}
+.sky-credit a { color: inherit; text-decoration: underline; cursor: pointer; }
+.sky-credit a:hover { color: #fff; }
+#dashboard-ui.collapsed .sky-credit { left: 56px; bottom: 14px; }
+
 /* ═══════════════ Collapsed UI (plaza on its own) ═══════════════ */
 .blade-stack, .hints { transition: transform 0.5s var(--ease-out), opacity 0.35s; }
 #dashboard-ui.collapsed .blade-stack { transform: translateX(calc(-100% - 60px)); }
@@ -499,6 +549,7 @@ kbd {
 
 @media (pointer: coarse) {
   .hints { display: none; }                         /* keys and controller buttons mean nothing on a touch screen */
+  .sky-credit { bottom: 14px; }
   .blade-stack { bottom: 10px; }
   .option-list .step { width: 40px; height: 40px; font-size: 15px; }
   .plain-list.selectable li:not(.subtitle) { padding: 10px; }

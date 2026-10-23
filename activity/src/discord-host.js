@@ -123,6 +123,8 @@ const backend = {
   ToggleSound: call(() => (sound.enabled = !sound.enabled)),
   ToggleFullscreen: call(() => {}),
   Exit: call((s) => s.sdk.close(RPCCloseCodes.CLOSE_NORMAL, "exit")),
+  // Credits' links: Discord shows its own "leaving Discord" confirmation. https only.
+  OpenExternal: call((s, url) => { if (/^https:\/\//.test(String(url))) s.sdk.commands.openExternalLink({ url: String(url) }); }),
   LogCanvasClick: call(() => {}),
   MediaPlayPause: call(() => {}),
   MediaNext: call(() => {}),

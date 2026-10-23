@@ -6,8 +6,12 @@ import { RESIDENTS, RESIDENT_SPOTS } from "../avatar/residents.js";
 import { CameraDirector } from "./CameraDirector.js";
 import { PlazaAI } from "../avatar/AvatarAI.js";
 import { FrameMonitor, TIERS, TIER_ORDER } from "./Quality.js";
+import { DEFAULT_SKY, SkyDome, SKIES } from "./Sky.js";
 
 const DRAG_THRESHOLD = 6; // px of pointer travel before a press on an avatar becomes a grab
+
+// Lights for tinted (classic) skies; the blade tint supplies sky, floor and light colours on top.
+const CLASSIC_LIGHTS = { ground: 0x0a1a05, sun: 0xffffff, sunIntensity: 1.7, hemiIntensity: 1.1 };
 
 const BLADE_TINT = {
   games: { sky: 0x2f7a1a, floor: 0x1f5a10, light: 0xc8ff9a },
@@ -56,6 +60,8 @@ export class Plaza {
     sun.shadow.bias = -0.0005;
     Object.assign(sun.shadow.camera, { left: -10, right: 10, top: 10, bottom: -10 });
     this.scene.add(sun);
+    this.skyDome = new SkyDome(this.scene);
+    this.sky = SKIES[DEFAULT_SKY];
     const fill = new THREE.DirectionalLight(0xffffff, 0.45);
     fill.position.set(-4, 3, 6);
     this.scene.add(fill);
@@ -100,6 +106,14 @@ export class Plaza {
       this.resize();
     }
     this.refreshVisibility();
+    this.skyDome?.setDetail(name !== "low");
+  }
+
+  /// Switches the plaza sky (see Sky.js). Returns the preset actually applied (unknown names fall back to classic).
+  setSky(name) {
+    this.sky = this.skyDome.set(name);
+    this.skyDome.setDetail(this.tier !== "low");
+    return this.skyDome.name;
   }
 
   stepDown(fps) {
@@ -362,13 +376,22 @@ export class Plaza {
       this.marker.scale.setScalar(this.marker.scale.x + dt * 1.6);
     }
 
-    if (this.tint) {
+    // Ease the world towards its target look: the blade's tint for tinted skies, or the sky preset's fixed look.
+    const look = this.sky.tinted
+      ? this.tint && { ...CLASSIC_LIGHTS, sky: this.tint.sky, floor: this.tint.floor, light: this.tint.light }
+      : this.sky.look;
+    if (look) {
       const k = 1 - Math.exp(-dt * 4);
-      this.scene.background.lerp(new THREE.Color(this.tint.sky), k);
+      this.scene.background.lerp(new THREE.Color(look.sky), k);
       this.scene.fog.color.copy(this.scene.background);
-      this.floorMaterial.color.lerp(new THREE.Color(this.tint.floor), k);
-      this.hemi.color.lerp(new THREE.Color(this.tint.light), k);
+      this.floorMaterial.color.lerp(new THREE.Color(look.floor), k);
+      this.hemi.color.lerp(new THREE.Color(look.light), k);
+      this.hemi.groundColor.lerp(new THREE.Color(look.ground), k);
+      this.hemi.intensity += (look.hemiIntensity - this.hemi.intensity) * k;
+      this.sun.color.lerp(new THREE.Color(look.sun), k);
+      this.sun.intensity += (look.sunIntensity - this.sun.intensity) * k;
     }
+    this.skyDome.update(t, this.camera);
 
     this.renderer.render(this.scene, this.camera);
   }

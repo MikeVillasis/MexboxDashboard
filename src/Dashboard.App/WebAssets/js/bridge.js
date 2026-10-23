@@ -20,7 +20,7 @@
 //   GetVersion GetLibraryJson GetSettingsJson GetProfileJson FocusGame(id) LaunchGame(id) Rescan
 //   GetAvatarDnaJson SaveAvatarDnaJson(json) InspectAvatar(dnaJson)
 //   GetFriendCode GetFriendsJson RememberFriend(code, dnaJson) ForgetFriend(code)
-//   PlaySound(cue) ToggleSound ToggleFullscreen Exit LogCanvasClick(x, z)
+//   PlaySound(cue) ToggleSound ToggleFullscreen Exit LogCanvasClick(x, z) OpenExternal(url)?
 //   MediaPlayPause MediaNext MediaPrevious
 (function () {
   "use strict";
