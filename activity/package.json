@@ -9,6 +9,7 @@
   "devDependencies": {
     "@discord/embedded-app-sdk": "^2.5.0",
     "esbuild": "^0.28.2",
+    "meshoptimizer": "^1.3.0",
     "ws": "^8.22.0"
   },
   "allowScripts": {

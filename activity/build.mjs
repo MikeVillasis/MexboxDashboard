@@ -54,6 +54,8 @@ await esbuild.build({
 await cp(path.join(assets, "js", "bridge.js"), path.join(dist, "bridge.js"));
 await cp(path.join(assets, "css"), path.join(dist, "css"), { recursive: true });
 await cp(path.join(here, "src", "activity.css"), path.join(dist, "activity.css"));
+// The mannequin body (activity/tools/build-mannequin.mjs); its presence switches avatars to the mannequin kit.
+await cp(path.join(here, "models"), path.join(dist, "models"), { recursive: true });
 for (const file of await readdir(sounds)) {
   if (file.endsWith(".wav")) await cp(path.join(sounds, file), path.join(dist, "sounds", file));
 }
@@ -66,6 +68,10 @@ html = rewrite(html, '<script src="js/bridge.js"></script>', '<script src="disco
 html = rewrite(html, '<script src="vendor/peerjs/peerjs.min.js"></script>', "");
 html = rewrite(html, '<script type="module" src="js/main.js"></script>', '<script type="module" src="app.js"></script>');
 html = rewrite(html, "<title>xbox 360 dashboard</title>", "<title>mexbox plaza</title>");
+// CC-BY-4.0 credit for the mannequin body, under the avatar customiser.
+html = rewrite(html, '<ul id="avatar-options" class="item-list option-list interactive"></ul>',
+  '<ul id="avatar-options" class="item-list option-list interactive"></ul>\n            ' +
+  '<p class="subtitle model-credit">body model: \u201csculpting a human body\u201d by Animation-class-k (CC BY 4.0)</p>');
 await writeFile(path.join(dist, "index.html"), html);
 
 const size = async (f) => ((await readFile(path.join(dist, f))).length / 1024).toFixed(0);

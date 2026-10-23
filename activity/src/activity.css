@@ -13,3 +13,6 @@
   text-align: center;
   text-transform: lowercase;
 }
+
+/* CC-BY credit for the mannequin body, at the bottom of the avatar customiser. */
+.model-credit { margin-top: 14px; font-size: 12px; opacity: 0.75; text-transform: none; }

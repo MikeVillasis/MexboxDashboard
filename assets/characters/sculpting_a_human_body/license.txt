@@ -1,0 +1,11 @@
+Model Information:
+* title:	sculpting a human body
+* source:	https://sketchfab.com/3d-models/sculpting-a-human-body-a24baf3514834527972bffdad882258e
+* author:	Animation-class-k (https://sketchfab.com/Animation-class-k)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "sculpting a human body" (https://sketchfab.com/3d-models/sculpting-a-human-body-a24baf3514834527972bffdad882258e) by Animation-class-k (https://sketchfab.com/Animation-class-k) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)

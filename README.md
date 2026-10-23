@@ -143,3 +143,11 @@ so play/pause never re-decodes the image. Packaged players get their display nam
 - Generated covers carry no title text. The list row and preview already show the title.
 - UI sounds are synthesised by `tools/generate_sounds.py` (original, no third-party rights). `SoundPlayer` plays one cue at a time, so a new cue cuts the previous one.
 - The "Convection" typeface is not bundled. The UI uses Segoe UI Semibold; change `DashFont` in `Themes/Palette.xaml`.
+
+## Credits
+- Plaza avatar body (Discord Activity): this work is based on
+  ["sculpting a human body"](https://sketchfab.com/3d-models/sculpting-a-human-body-a24baf3514834527972bffdad882258e)
+  by [Animation-class-k](https://sketchfab.com/Animation-class-k), licensed under
+  [CC-BY-4.0](http://creativecommons.org/licenses/by/4.0/). Source in `assets/characters/sculpting_a_human_body/`
+  (with its `license.txt`); `activity/tools/build-mannequin.mjs` scales, relabels and simplifies it into
+  `activity/models/mannequin.glb`.

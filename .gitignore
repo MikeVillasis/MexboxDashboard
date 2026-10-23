@@ -22,3 +22,6 @@ server/.dev.vars
 activity/node_modules/
 activity/dist/
 activity/dist-dev/
+
+# macOS Finder metadata
+.DS_Store

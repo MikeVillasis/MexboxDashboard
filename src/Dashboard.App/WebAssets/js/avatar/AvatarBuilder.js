@@ -1,10 +1,13 @@
 // Modular avatar assembly: one shared skeleton per avatar, body parts as SkinnedMeshes bound to it, swapped
 // independently when the DNA recipe changes.
 //
-// Two kits produce the same Avatar interface:
-//   • GLTF kit  — used when WebAssets/models/base_rig.glb exists: the rig is cloned with SkeletonUtils.clone() and part
-//                 files (models/{slot}_{id}.glb, e.g. hair_3.glb) are rebound bone-by-name onto the shared skeleton.
-//   • Procedural kit — the fallback (and today's default): a code-built humanoid skeleton with rigidly skinned
+// Three kits produce the same Avatar interface (the first whose files exist wins):
+//   • GLTF kit  — models/base_rig.glb: the rig is cloned with SkeletonUtils.clone() and part files
+//                 (models/{slot}_{id}.glb, e.g. hair_3.glb) are rebound bone-by-name onto the shared skeleton.
+//   • Mannequin kit — models/mannequin.glb (activity/tools/build-mannequin.mjs): a segmented mannequin body whose pieces
+//                 are rigidly skinned to the procedural skeleton placed at the mannequin's joints; clothing colours
+//                 paint its segments, and the procedural hair and face are fitted to its head. Discord Activity only.
+//   • Procedural kit — the fallback (the Windows app today): a code-built humanoid skeleton with rigidly skinned
 //                 primitive parts, so the whole pipeline works before any art exists.
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
@@ -38,19 +41,20 @@ export class AvatarBuilder {
 
   /// Picks the kit once: art if present, procedural otherwise.
   async init() {
-    try {
-      const probe = await fetch("models/base_rig.glb", { method: "HEAD" });
-      if (probe.ok) {
-        this.kit = new GltfKit();
+    for (const [file, Kit, name] of [["models/base_rig.glb", GltfKit, "GLTF"], ["models/mannequin.glb", MannequinKit, "mannequin"]]) {
+      try {
+        const probe = await fetch(file, { method: "HEAD" });
+        if (!probe.ok) continue;
+        this.kit = new Kit();
         await this.kit.init();
-        console.info("avatars: using GLTF kit (models/base_rig.glb)");
+        console.info(`avatars: using ${name} kit (${file})`);
         return this;
+      } catch (err) {
+        console.warn(`avatars: ${name} kit unavailable`, err);
       }
-    } catch (err) {
-      console.warn("avatars: GLTF kit unavailable, using procedural kit", err);
     }
     this.kit = new ProceduralKit();
-    console.info("avatars: using procedural kit (no models/base_rig.glb)");
+    console.info("avatars: using procedural kit (no avatar models found)");
     return this;
   }
 
@@ -121,7 +125,7 @@ export class Avatar {
     const old = this.parts.get(slot);
     if (old) {
       this.root.remove(old);
-      old.traverse((o) => o.geometry?.dispose());
+      old.traverse((o) => { if (!o.geometry?.userData.shared) o.geometry?.dispose(); }); // kit caches stay alive
     }
     if (part) {
       part.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
@@ -193,7 +197,7 @@ export class Avatar {
   }
 
   dispose() {
-    this.root.traverse((o) => o.geometry?.dispose());
+    this.root.traverse((o) => { if (!o.geometry?.userData.shared) o.geometry?.dispose(); });
     for (const m of Object.values(this.materials)) m.dispose();
     this.faceTextures.eyes.dispose();
     this.faceTextures.mouth.dispose();
@@ -246,14 +250,18 @@ const HEAD_SCALE = [
 ];
 
 class ProceduralKit {
+  /// Joint positions (avatar space) the skeleton is built from; the mannequin kit supplies its own.
+  get joints() { return P; }
+
   createRig(root) {
+    const joints = this.joints;
     const bones = BONES.map(([name]) => Object.assign(new THREE.Bone(), { name }));
-    BONES.forEach(([, parent, pos], i) => {
+    BONES.forEach(([name, parent], i) => {
       const bone = bones[i];
-      const world = new THREE.Vector3(...pos);
+      const world = joints[name];
       if (parent) {
         const p = BONE_INDEX[parent];
-        bone.position.copy(world).sub(P[parent]);
+        bone.position.copy(world).sub(joints[parent]);
         bones[p].add(bone);
       } else {
         bone.position.copy(world);
@@ -263,7 +271,7 @@ class ProceduralKit {
     // Inverses are taken with the avatar root at the origin; parts bind with an identity bind matrix (see bindPart).
     root.updateMatrixWorld(true);
     const skeleton = new THREE.Skeleton(bones);
-    return { skeleton, bones: Object.fromEntries(bones.map((b) => [b.name, b])), rest: bones.map((b) => b.quaternion.clone()) };
+    return { skeleton, bones: Object.fromEntries(bones.map((b) => [b.name, b])), rest: bones.map((b) => b.quaternion.clone()), restHipsY: joints.hips.y };
   }
 
   async buildPart(slot, id, avatar) {
@@ -306,9 +314,9 @@ class ProceduralKit {
       b.upperArm_L.rotation.x = -Math.sin(p) * 0.45 * w;
       b.upperArm_R.rotation.x = Math.sin(p) * 0.45 * w;
       b.spine.rotation.y = Math.sin(p) * 0.08 * w;
-      b.hips.position.y = P.hips.y + Math.abs(Math.cos(p)) * 0.03 * w;
+      b.hips.position.y = rig.restHipsY + Math.abs(Math.cos(p)) * 0.03 * w;
     } else {
-      b.hips.position.y = P.hips.y;
+      b.hips.position.y = rig.restHipsY;
     }
 
     // Gestures.
@@ -493,7 +501,7 @@ function envelope(time, total) {
   return Math.min(1, time / ramp, Math.max(0, (total - time) / ramp));
 }
 
-function group(...objects) { const g = new THREE.Group(); objects.forEach((o) => g.add(o)); return g; }
+function group(...objects) { const g = new THREE.Group(); objects.forEach((o) => o && g.add(o)); return g; }
 
 function arm(side, upperR, foreR) {
   const s = side;
@@ -630,6 +638,123 @@ function hairPart(id, headId, material, skeleton) {
       break;
   }
   return group(bindPart(merge(pieces.map((g) => [g, "head"])), material, skeleton));
+}
+
+// ═══════════════════════════════ Mannequin kit ═══════════════════════════════
+// models/mannequin.glb: one mesh per bone (node named after the bone) in avatar space, plus scene extras with the
+// joints and the head's centre/radii. Pieces are rigidly skinned like the procedural parts, so every animation layer
+// (walk, gestures, dangle, sleep) works unchanged. Body model: "sculpting a human body" by Animation-class-k, CC-BY-4.0.
+
+// Which segments each clothing style paints; anything in the slot's region that isn't painted shows skin.
+const MANNEQUIN_TORSO = [ // index = torsoId: tee, long sleeve, hoodie, tank top
+  { shirt: ["chest", "spine", "upperArm_L", "upperArm_R"], skin: ["foreArm_L", "foreArm_R"] },
+  { shirt: ["chest", "spine", "upperArm_L", "upperArm_R", "foreArm_L", "foreArm_R"], skin: [] },
+  { shirt: ["chest", "spine", "upperArm_L", "upperArm_R", "foreArm_L", "foreArm_R"], skin: [], hood: true },
+  { shirt: ["chest", "spine"], skin: ["upperArm_L", "upperArm_R", "foreArm_L", "foreArm_R"] },
+];
+const MANNEQUIN_LEGS = [ // index = legsId: jeans, shorts, skirt
+  { legs: ["hips", "thigh_L", "thigh_R", "shin_L", "shin_R"], skin: [] },
+  { legs: ["hips", "thigh_L", "thigh_R"], skin: ["shin_L", "shin_R"] },
+  { legs: ["hips"], skin: ["thigh_L", "thigh_R", "shin_L", "shin_R"], skirt: true },
+];
+
+class MannequinKit extends ProceduralKit {
+  async init() {
+    const gltf = await new GLTFLoader().loadAsync("models/mannequin.glb");
+    const extras = gltf.scene.userData;
+    this.positions = Object.fromEntries(Object.entries(extras.joints).map(([bone, v]) => [bone, new THREE.Vector3(...v)]));
+    this.headCenter = new THREE.Vector3(...extras.headCenter);
+    this.headRadii = new THREE.Vector3(...extras.headRadii);
+    this.pieces = new Map();
+    gltf.scene.traverse((o) => {
+      if (!o.isMesh) return;
+      const geo = o.geometry.clone();
+      geo.computeVertexNormals();
+      this.pieces.set(o.name, geo);
+    });
+    this.cache = new Map(); // "slot|style|role" → shared, already-weighted geometry
+  }
+
+  get joints() { return this.positions; }
+
+  /// Merged, rigidly weighted geometry for a list of bone pieces (+ extra [geometry, bone] pairs), cached and shared
+  /// by every avatar wearing the same thing.
+  region(key, bones, extra = []) {
+    if (this.cache.has(key)) return this.cache.get(key);
+    // Indexed throughout (smooth shading); extras drop their UVs so every piece has the same attributes to merge.
+    const parts = [
+      ...bones.map((bone) => [this.pieces.get(bone).clone(), bone]),
+      ...extra.map(([g, bone]) => { g.deleteAttribute("uv"); return [g, bone]; }),
+    ];
+    const geo = parts.length ? merge(parts) : null;
+    if (geo) geo.userData.shared = true;
+    this.cache.set(key, geo);
+    return geo;
+  }
+
+  /// Procedural head-space (HEAD_CENTER, HEAD_RADIUS) → the mannequin's head, so hair and face shells fit it.
+  headFit(pad = 1) {
+    const r = this.headRadii.clone().multiplyScalar(pad / HEAD_RADIUS);
+    return new THREE.Matrix4().makeTranslation(this.headCenter.x, this.headCenter.y, this.headCenter.z)
+      .multiply(new THREE.Matrix4().makeScale(r.x, r.y, r.z))
+      .multiply(new THREE.Matrix4().makeTranslation(-HEAD_CENTER.x, -HEAD_CENTER.y, -HEAD_CENTER.z));
+  }
+
+  async buildPart(slot, id, avatar) {
+    const m = avatar.materials;
+    const s = avatar.rig.skeleton;
+    const mesh = (geo, material) => (geo ? bindPart(geo, material, s) : null);
+    switch (slot) {
+      case "body": return group(mesh(this.region("body", ["neck", "hand_L", "hand_R"]), m.skin));
+      case "shoes": return group(mesh(this.region("shoes", ["foot_L", "foot_R"]), m.shoes));
+      case "head": {
+        const style = HEAD_SCALE[id] ? id : 0;
+        const scale = HEAD_SCALE[style];
+        // Head shape: stretch the mannequin's head about its centre (same factors as the procedural heads).
+        const shape = new THREE.Matrix4().makeTranslation(this.headCenter.x, this.headCenter.y, this.headCenter.z)
+          .multiply(new THREE.Matrix4().makeScale(scale.x, scale.y, scale.z))
+          .multiply(new THREE.Matrix4().makeTranslation(-this.headCenter.x, -this.headCenter.y, -this.headCenter.z));
+        const key = `head|${style}`;
+        if (!this.cache.has(key)) {
+          const geo = merge([[this.pieces.get("head").clone().applyMatrix4(shape), "head"]]);
+          geo.userData.shared = true;
+          this.cache.set(key, geo);
+        }
+        // Face shells: the procedural ones (eyes/mouth atlases), fitted a touch outside the egg-shaped head.
+        const fit = this.headFit(1.06);
+        const eyes = faceShell(scale, Math.PI * 0.3, Math.PI * 0.4, Math.PI * 0.34, Math.PI * 0.16, avatar.faceTextures.eyes, s);
+        const mouth = faceShell(scale, Math.PI * 0.39, Math.PI * 0.22, Math.PI * 0.58, Math.PI * 0.12, avatar.faceTextures.mouth, s);
+        for (const shell of [eyes, mouth]) shell.geometry.applyMatrix4(fit);
+        return group(mesh(this.cache.get(key), m.skin), eyes, mouth);
+      }
+      case "hair": {
+        const hair = hairPart(id, avatar.dna.headId, m.hair, s);
+        hair?.traverse((o) => o.geometry?.applyMatrix4(this.headFit(1.0)));
+        return hair;
+      }
+      case "torso": {
+        const style = id % MANNEQUIN_TORSO.length;
+        const look = MANNEQUIN_TORSO[style];
+        const hood = look.hood ? [[at(new THREE.TorusGeometry(0.07, 0.03, 8, 20).rotateX(Math.PI / 2 - 0.25).scale(1.2, 1, 1),
+          0, this.positions.neck.y - 0.03, this.positions.neck.z - 0.05), "chest"]] : [];
+        return group(
+          mesh(this.region(`torso|${style}|shirt`, look.shirt, hood), m.shirt),
+          mesh(this.region(`torso|${style}|skin`, look.skin), m.skin),
+        );
+      }
+      case "legs": {
+        const style = id % MANNEQUIN_LEGS.length;
+        const look = MANNEQUIN_LEGS[style];
+        const hips = this.positions.hips;
+        const skirt = look.skirt ? [[at(new THREE.CylinderGeometry(0.15, 0.24, 0.36, 22, 1, true), 0, hips.y - 0.12, hips.z), "hips"]] : [];
+        return group(
+          mesh(this.region(`legs|${style}|legs`, look.legs, skirt), m.legs),
+          mesh(this.region(`legs|${style}|skin`, look.skin), m.skin),
+        );
+      }
+    }
+    return null;
+  }
 }
 
 // ═══════════════════════════════ GLTF kit ═══════════════════════════════
