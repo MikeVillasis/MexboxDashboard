@@ -3,6 +3,7 @@
 //   dome   an inverted sphere that follows the camera (the far sky)
 //   wall   an open cylinder standing on the floor round the plaza: what the elevated plaza camera actually sees
 //   floor  an additive ring on the floor in front of the wall: the lines' glow and reflections
+// Each preset picks its parts and may shrink the plaza floor (floorScale: the plaza as a rooftop).
 // Plaza.setSky() switches presets; the plaza menu lists them.
 import * as THREE from "three";
 
@@ -123,6 +124,108 @@ const NEON_SHADER = {
     }`,
 };
 
+// "City night": an aerial blue-hour city, reproduced from a photo by MF Evelyn on Unsplash (credited in-app while the
+// preset is on). The plaza becomes a rooftop high above it: below the horizon each view ray meets a ground plane far
+// down, where a block grid of blue rooftops, lit windows, signs, aviation lights, parks and a winding highway with
+// streams of car lights fades into haze; above it, a blue-hour gradient.
+const CITY_SHADER = {
+  uniforms: {
+    uTime: { value: 0 },
+    uDetail: { value: 1 },             // 0 on the low quality tier: no windows, signs or traffic
+    uCam: { value: new THREE.Vector3() }, // the city stays put while the dome follows the camera
+  },
+  vertexShader: /* glsl */ `
+    varying vec3 vPos;
+    void main() {
+      vPos = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform float uTime;
+    uniform float uDetail;
+    uniform vec3 uCam;
+    varying vec3 vPos;
+
+    float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+
+    const vec3 HAZE = vec3(0.20, 0.28, 0.44);
+    const float BLOCK = 24.0;   // metres per city block (including its roads)
+    const float STREET = 3.2;   // road width at the block edges
+    const float DEPTH = 90.0;   // the city lies this far below the rooftop
+
+    // The highway: a gentle S-curve heading away from the default view (-Z), 11 m wide.
+    float highwayX(float z) { return 26.0 * sin(z * 0.0045) + 9.0 * sin(z * 0.013 + 1.3); }
+
+    void main() {
+      vec3 d = normalize(vPos);
+      if (d.y > -0.003) { // blue-hour sky over the haze line
+        vec3 zenith = vec3(0.035, 0.06, 0.16);
+        gl_FragColor = vec4(mix(HAZE, zenith, pow(smoothstep(-0.003, 0.55, d.y), 0.55)), 1.0);
+        return;
+      }
+      float t = DEPTH / -d.y;                  // distance along the ray to the city
+      vec2 p = uCam.xz + d.xz * t;
+      float px = max(fwidth(p.x), fwidth(p.y)); // metres per pixel here: fades detail before it can shimmer
+      float near = smoothstep(2.0, 0.35, px);
+      float detail = near * uDetail;
+
+      vec2 cell = floor(p / BLOCK);
+      vec2 f = mod(p, BLOCK);
+      float park = step(hash(cell * 3.7), 0.07);
+
+      // Lots: each block split into 2-3 by 2-3 buildings, separated by dark alleys.
+      vec2 counts = 1.0 + floor(vec2(hash(cell + 1.7), hash(cell + 9.2)) * 3.99);
+      vec2 lotP = clamp((f - STREET) / (BLOCK - STREET), 0.0, 0.999) * counts;
+      vec2 lot = floor(lotP);
+      vec2 lf = fract(lotP);
+      float id = hash(cell * 7.13 + lot * 1.31);
+      float height = id * id;                   // taller buildings catch more of the sky: lighter roofs
+      vec3 col = mix(vec3(0.045, 0.075, 0.17), vec3(0.25, 0.34, 0.55), height * 0.9 + 0.15 * hash(lot + cell * 2.3));
+      float edge = min(min(lf.x, 1.0 - lf.x), min(lf.y, 1.0 - lf.y));
+      col *= mix(0.3, 1.0, smoothstep(0.03, 0.12, edge));        // alleys and roof edges
+      col = mix(col, vec3(0.05, 0.09, 0.13), park);              // parks and shrines: dark green-blue
+
+      // Lit windows: a fine grid on each roof, a few cells lit warm or cool (more on tall buildings).
+      if (detail > 0.0 && park < 0.5) {
+        vec2 w = p * vec2(0.9, 0.75);
+        vec2 wc = floor(w);
+        float lit = step(0.94 - height * 0.08, hash(wc + cell * 13.0));
+        float pane = step(0.45, fract(w.x)) * step(0.5, fract(w.y));
+        vec3 glow = mix(vec3(1.0, 0.76, 0.42), vec3(0.78, 0.88, 1.0), step(0.75, hash(wc * 1.7)));
+        col += glow * lit * pane * detail * 0.85 * smoothstep(0.08, 0.16, edge);
+        // Rare signs and red aviation lights on the tallest towers.
+        float sign = step(0.985, id) * step(0.15, lf.y) * step(lf.y, 0.45) * step(0.1, lf.x) * step(lf.x, 0.9);
+        vec3 signCol = id > 0.993 ? vec3(0.25, 0.95, 0.45) : (id > 0.989 ? vec3(1.0, 0.45, 0.15) : vec3(0.95, 0.95, 1.0));
+        col = mix(col, signCol, sign * detail);
+        float beacon = step(0.93, height) * step(length(lf - 0.15), 0.06) * step(0.0, sin(uTime * 2.5 + id * 20.0));
+        col += vec3(1.0, 0.12, 0.1) * beacon * detail * 1.5;
+      }
+
+      // Streets: dark, with a dotted line of street lights.
+      float street = 1.0 - step(STREET, f.x) * step(STREET, f.y);
+      vec3 streetCol = vec3(0.025, 0.035, 0.075) + vec3(1.0, 0.75, 0.4) * step(0.93, fract((f.x + f.y) * 0.3)) * 0.4 * detail;
+      col = mix(col, streetCol, street * (1.0 - park));
+
+      // The highway: purple-grey asphalt with glowing edges and streams of tail lights (red) and headlights (white).
+      float hx = p.x - highwayX(p.y);
+      float road = 1.0 - smoothstep(4.2, 4.2 + px * 1.5, abs(hx));
+      if (road > 0.0) {
+        vec3 asphalt = vec3(0.06, 0.055, 0.12);
+        float rail = smoothstep(px * 1.2 + 0.18, 0.0, abs(abs(hx) - 4.2));
+        asphalt += vec3(0.6, 0.5, 0.9) * rail * 0.45;
+        float lane = hx < 0.0 ? 1.0 : -1.0;
+        float flow = fract(p.y * 0.12 + uTime * 0.35 * lane + hash(vec2(floor(hx * 0.7), 3.0)));
+        float car = step(0.7, flow) * step(0.8, abs(hx)) * step(abs(hx), 3.6) * detail;
+        asphalt += car * (hx < 0.0 ? vec3(1.0, 0.3, 0.12) : vec3(1.0, 0.9, 0.75)) * 1.4;
+        col = mix(col, asphalt, road);
+      }
+
+      // Haze with distance, as in the photo's horizon.
+      col = mix(col, HAZE, smoothstep(250.0, 2200.0, t));
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+};
+
 export const SKIES = {
   classic: { label: "classic", tinted: true },
   neon: {
@@ -134,6 +237,18 @@ export const SKIES = {
     credit: {
       html: 'Photo by <a href="https://unsplash.com/@zaks?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Zak</a> on ' +
         '<a href="https://unsplash.com/photos/blue-red-and-pink-abstract-artwork-7wBFsHWQDlk?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>',
+    },
+  },
+  city: {
+    label: "city night",
+    tinted: false,
+    shader: CITY_SHADER,
+    parts: ["dome"],
+    floorScale: 0.5, // a 15 m rooftop: avatars stay within 8.5 m, the city shows all round it
+    look: { sky: 0x2b3b5e, floor: 0x1b2438, light: 0x9db2ff, ground: 0x141a2c, sun: 0xc4d2ff, sunIntensity: 1.0, hemiIntensity: 1.15 },
+    credit: {
+      html: 'Photo by <a href="https://unsplash.com/@liaoweimeifang?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">MF Evelyn</a> on ' +
+        '<a href="https://unsplash.com/photos/aerial-photo-of-city-QifOXDApdsw?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>',
     },
   },
 };
@@ -173,25 +288,29 @@ export class SkyDome {
         toneMapped: false,
         ...extra,
       });
-      Object.assign(m.uniforms.uMode, { value: mode });
-      m.uniforms.uWallHeight.value = WALL_HEIGHT;
-      m.uniforms.uWallRadius.value = WALL_RADIUS;
+      if (m.uniforms.uMode) m.uniforms.uMode.value = mode;
+      if (m.uniforms.uWallHeight) m.uniforms.uWallHeight.value = WALL_HEIGHT;
+      if (m.uniforms.uWallRadius) m.uniforms.uWallRadius.value = WALL_RADIUS;
       return m;
     };
+    const parts = preset.parts ?? ["dome", "wall", "floor"];
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(80, 32, 16), material(0));
     this.dome.renderOrder = -2;
     this.dome.frustumCulled = false;
+    this.meshes = [this.dome];
 
-    const wallGeometry = new THREE.CylinderGeometry(WALL_RADIUS, WALL_RADIUS, WALL_HEIGHT, 96, 1, true);
-    wallGeometry.translate(0, WALL_HEIGHT / 2, 0); // stands on the floor; local y = height up the wall
-    const wall = new THREE.Mesh(wallGeometry, material(1, { depthWrite: true })); // hides the floor beyond it
-
-    const floorGeometry = new THREE.RingGeometry(WALL_RADIUS * 0.4, WALL_RADIUS, 96, 4).rotateX(-Math.PI / 2);
-    const floor = new THREE.Mesh(floorGeometry, material(2, { side: THREE.DoubleSide, transparent: true, blending: THREE.AdditiveBlending }));
-    floor.position.y = 0.01;
-    floor.renderOrder = 1;
-
-    this.meshes = [this.dome, wall, floor];
+    if (parts.includes("wall")) {
+      const wallGeometry = new THREE.CylinderGeometry(WALL_RADIUS, WALL_RADIUS, WALL_HEIGHT, 96, 1, true);
+      wallGeometry.translate(0, WALL_HEIGHT / 2, 0); // stands on the floor; local y = height up the wall
+      this.meshes.push(new THREE.Mesh(wallGeometry, material(1, { depthWrite: true }))); // hides the floor beyond it
+    }
+    if (parts.includes("floor")) {
+      const floorGeometry = new THREE.RingGeometry(WALL_RADIUS * 0.4, WALL_RADIUS, 96, 4).rotateX(-Math.PI / 2);
+      const floor = new THREE.Mesh(floorGeometry, material(2, { side: THREE.DoubleSide, transparent: true, blending: THREE.AdditiveBlending }));
+      floor.position.y = 0.01;
+      floor.renderOrder = 1;
+      this.meshes.push(floor);
+    }
     this.scene.add(...this.meshes);
     return preset;
   }
@@ -203,6 +322,9 @@ export class SkyDome {
   update(time, camera) {
     if (!this.dome) return;
     this.dome.position.copy(camera.position); // infinitely far: it never gets closer as the camera moves
-    for (const mesh of this.meshes) mesh.material.uniforms.uTime.value = time;
+    for (const mesh of this.meshes) {
+      mesh.material.uniforms.uTime.value = time;
+      mesh.material.uniforms.uCam?.value.copy(camera.position);
+    }
   }
 }

@@ -13,3 +13,7 @@ first reproducing a long-exposure light-painting photo (Zak on Unsplash, credite
   look while on. Picker in the plaza panel, remembered per viewer; credit links via host OpenExternal. Low tier drops
   the coil layer. Compared side by side with the reference over three tuning passes.
 - 2026-10-23: owner checked neon trails in Discord; sky picker turned into a scrolling dropdown (opens in the panel flow, closes on pick or outside click). Reference photo committed with a credit README.
+- 2026-10-23: added "city night" (aerial blue-hour city after MF Evelyn's photo): the plaza becomes a 15 m rooftop
+  (`floorScale`) over a dome-shader city: rays hit a ground plane 90 m down; varied lots, sparse lit windows, signs,
+  blinking aviation lights, parks, a winding highway with tail/headlight streams, distance haze, blue-hour sky.
+  Presets now choose their parts (`parts`); low tier drops windows/signs/traffic. Credit bottom-left while on.

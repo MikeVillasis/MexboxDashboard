@@ -112,6 +112,7 @@ export class Plaza {
   /// Switches the plaza sky (see Sky.js). Returns the preset actually applied (unknown names fall back to classic).
   setSky(name) {
     this.sky = this.skyDome.set(name);
+    this.floor.scale.setScalar(this.sky.floorScale ?? 1); // some skies make the plaza a smaller rooftop
     this.skyDome.setDetail(this.tier !== "low");
     return this.skyDome.name;
   }
