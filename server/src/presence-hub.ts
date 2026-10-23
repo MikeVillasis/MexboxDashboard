@@ -14,7 +14,10 @@ import { sameStatus, statusFromPresence, type Status } from "./presence";
 const GATEWAY = "https://gateway.discord.gg/?v=10&encoding=json";
 const INTENTS = (1 << 0) | (1 << 8); // GUILDS (for GUILD_CREATE with presences) | GUILD_PRESENCES (privileged)
 const ROOM_IDLE_MS = 5 * 60 * 1000;
-const CHECK_MS = 60 * 1000;
+// Cloudflare idles a Durable Object about 10 s after its last incoming event, and an outbound WebSocket doesn't count:
+// production connections died with 1006 ~10 s after every connect. While rooms are occupied the alarm fires this often
+// to keep the hub (and its Discord connection) awake; ~720 alarms per hour of plaza use, nothing when it's empty.
+const CHECK_MS = 5 * 1000;
 const EMPTY_GRACE_MS = 2 * 60 * 1000;
 const CONNECT_WAIT_MS = 5000; // a room join waits at most this long for the gateway before carrying on // a quick relaunch reuses the connection instead of logging the bot in again
 const RETRY_MS = [2000, 5000, 15000, 30000, 60000];
@@ -29,32 +32,13 @@ export class PresenceHub extends DurableObject<Env> {
   private acked = true;
   private attempt = 0;
   private rooms = new Map<string, { guildId: string; touched: number }>();
+  private emptySince: number | null = null; // last room left at; the connection is kept for EMPTY_GRACE_MS
   private statuses = new Map<string, Map<string, Status>>(); // guildId → discordId → status
-  // Diagnostics (counts and codes only; see health()).
-  private lastError: string | null = null;
-  private frames = 0;
-  private readyAt: number | null = null;
-  private snapshots = 0;
-
-  /** Temporary troubleshooting view: no ids, names or statuses. */
-  async health() {
-    return {
-      hasToken: Boolean(this.env.DISCORD_BOT_TOKEN),
-      connecting: this.connecting,
-      connected: Boolean(this.ws),
-      rooms: this.rooms.size,
-      frames: this.frames,
-      ready: this.readyAt !== null,
-      serverSnapshots: this.snapshots,
-      statuses: [...this.statuses.values()].reduce((n, m) => n + m.size, 0),
-      lastError: this.lastError,
-    };
-  }
-
   /** A room with people in it: (re)registers, makes sure the gateway is up, returns the guild's current statuses. */
   async subscribe(room: string, guildId: string): Promise<Record<string, Status>> {
     if (!isSnowflake(guildId) || !allowedGuilds(this.env).has(guildId)) return {};
     this.rooms.set(room, { guildId, touched: Date.now() });
+    this.emptySince = null;
     if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + CHECK_MS);
     if (!this.env.DISCORD_BOT_TOKEN) console.warn("presence: no DISCORD_BOT_TOKEN secret, bubbles are off");
     // Connect inside this call, not after it returns: on Cloudflare, work left running after an invocation finishes
@@ -67,13 +51,18 @@ export class PresenceHub extends DurableObject<Env> {
 
   async unsubscribe(room: string) {
     this.rooms.delete(room);
-    if (this.rooms.size === 0) await this.ctx.storage.setAlarm(Date.now() + EMPTY_GRACE_MS); // alarm() closes if still empty
+    if (this.rooms.size === 0) this.emptySince ??= Date.now(); // alarm() keeps the hub awake, then closes after the grace
   }
 
   async alarm() {
     const now = Date.now();
     for (const [room, info] of this.rooms) if (now - info.touched > ROOM_IDLE_MS) this.rooms.delete(room);
-    if (this.rooms.size === 0) { this.closeGateway(); return; }
+    if (this.rooms.size === 0) {
+      this.emptySince ??= now;
+      if (now - this.emptySince >= EMPTY_GRACE_MS) { this.closeGateway(); this.emptySince = null; return; }
+      await this.ctx.storage.setAlarm(now + CHECK_MS);
+      return;
+    }
     await this.ctx.storage.setAlarm(now + CHECK_MS);
     // Also the dependable reconnect path: timers set after an invocation ends may never fire.
     if (!this.ws) await Promise.race([this.openGateway(), new Promise((resolve) => setTimeout(resolve, CONNECT_WAIT_MS))]);
@@ -85,10 +74,12 @@ export class PresenceHub extends DurableObject<Env> {
     if (this.ws || this.connecting || !this.env.DISCORD_BOT_TOKEN || this.rooms.size === 0) return;
     this.connecting = true;
     try {
-      const response = await fetch(this.env.DISCORD_GATEWAY ?? GATEWAY, {
-        headers: { upgrade: "websocket" },
-        signal: AbortSignal.timeout(10_000), // never stay "connecting" forever
-      });
+      // Time-limit the handshake only. An abort signal on this fetch would stay attached to the upgraded WebSocket and
+      // kill it when it fires (seen in production: every connection closed 1006 exactly 10 s after connecting).
+      const response = await Promise.race([
+        fetch(this.env.DISCORD_GATEWAY ?? GATEWAY, { headers: { upgrade: "websocket" } }),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("handshake timed out")), 10_000)),
+      ]);
       const ws = response.webSocket;
       if (!ws) throw new Error(`gateway refused upgrade (${response.status})`);
       ws.accept();
@@ -100,8 +91,7 @@ export class PresenceHub extends DurableObject<Env> {
       ws.addEventListener("close", (event) => this.closed(event.code));
       ws.addEventListener("error", () => this.closed(1006));
     } catch (err) {
-      this.lastError = `connect: ${err instanceof Error ? err.message : "unknown"}`.slice(0, 200);
-      console.error("presence:", this.lastError);
+      console.error("presence: connect failed", err instanceof Error ? err.message : "unknown");
       this.scheduleReconnect();
     } finally {
       this.connecting = false;
@@ -120,7 +110,6 @@ export class PresenceHub extends DurableObject<Env> {
   private closed(code: number) {
     if (!this.ws) return; // we closed it
     console.warn(`presence: gateway closed ${code}`);
-    this.lastError = `closed ${code}`;
     this.ws = null;
     this.stopHeartbeat();
     // 4004 bad token, 4013/4014 intents not allowed: retrying won't help until the owner fixes the portal settings.
@@ -148,7 +137,6 @@ export class PresenceHub extends DurableObject<Env> {
 
   /** Gateway frames. Public so tests can drive the hub without a live Discord connection. */
   dispatch(payload: Payload) {
-    this.frames++;
     if (typeof payload.s === "number") this.seq = payload.s;
     switch (payload.op) {
       case 10: { // HELLO
@@ -170,7 +158,7 @@ export class PresenceHub extends DurableObject<Env> {
       case 7: this.ws?.close(4000, "reconnect requested"); break;
       case 9: this.ws?.close(4000, "invalid session"); break;
       case 0:
-        if (payload.t === "READY") { this.attempt = 0; this.readyAt = Date.now(); console.info(`presence: ready, bot in ${payload.d?.guilds?.length ?? 0} server(s)`); }
+        if (payload.t === "READY") { this.attempt = 0; console.info(`presence: ready, bot in ${payload.d?.guilds?.length ?? 0} server(s)`); }
         else if (payload.t === "GUILD_CREATE") this.guildCreate(payload.d);
         else if (payload.t === "PRESENCE_UPDATE") this.presence(payload.d?.guild_id, payload.d?.user?.id, payload.d);
         break;
@@ -178,8 +166,10 @@ export class PresenceHub extends DurableObject<Env> {
   }
 
   private guildCreate(guild: { id?: unknown; presences?: unknown }) {
-    if (!isSnowflake(guild?.id) || !allowedGuilds(this.env).has(guild.id)) { console.info("presence: ignoring a server that isn't allowlisted"); return; }
-    this.snapshots++;
+    if (!isSnowflake(guild?.id) || !allowedGuilds(this.env).has(guild.id)) {
+      console.info("presence: ignoring a server that isn't allowlisted");
+      return;
+    }
     console.info(`presence: server snapshot, ${Array.isArray(guild.presences) ? guild.presences.length : 0} online presence(s)`);
     const previous = this.statuses.get(guild.id) ?? new Map<string, Status>();
     this.statuses.set(guild.id, new Map());

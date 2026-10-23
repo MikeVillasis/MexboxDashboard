@@ -1,5 +1,5 @@
 # 11 Thought bubbles from Discord status
-Status: in-progress (deployed; bubbles NOT working in production yet, see 2026-10-22 debugging)
+Status: done
 Blocked by: 04
 
 Requested 2026-10-22: show what members are playing / listening to above their avatars, visible to everyone, for
@@ -19,3 +19,10 @@ present and away (napping) members. Source: Discord presence via a bot with the 
   gateway connection is never even attempted (a timeout or Discord rejection would have set lastError / frames).
   Next: suspect `subscribe`'s early return (allowlist/snowflake check on guildId) in production. Add the early-return
   reason and a subscribe counter to health(), reproduce with the owner, fix, then REMOVE /api/presence/health.
+- 2026-10-23: fixed and confirmed working in Discord (game and music bubbles, including napping members). Causes:
+  (1) Cloudflare idles a Durable Object ~10 s after its last incoming event and an outbound WebSocket doesn't count, so
+  every Gateway connection died with 1006 ~10 s after connecting; the hub now runs a 5 s alarm while rooms are occupied
+  (and through the 2-minute empty grace). (2) A fetch abort signal (an earlier timeout attempt) stayed attached to the
+  upgraded WebSocket; the handshake timeout is now a Promise.race. (3) The bot had only been installed with
+  `applications.commands`, so READY reported 0 servers; added via the URL Generator with the `bot` scope. The
+  temporary /api/presence/health endpoint and stored diagnostics were removed.

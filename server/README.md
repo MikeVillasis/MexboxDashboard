@@ -24,8 +24,9 @@ allowlist and (later) the plaza rooms. See `.scratch/discord-activity/spec.md`.
 Avatars show what members are playing / listening to / watching, from their Discord status. This needs a bot:
 11. **Bot → Reset Token**, then from this folder: `npx wrangler secret put DISCORD_BOT_TOKEN` (never paste it anywhere else).
 12. **Bot → Privileged Gateway Intents → Presence Intent: on.** (Free, no review under 100 servers.)
-13. **Installation → Guild Install → scopes: add `bot`** (no permissions needed), then add the bot to your server again
-    with the install link.
+13. **OAuth2 → URL Generator:** scopes `bot` + `applications.commands`, no permissions; open the generated URL and
+    authorize it for your server. The bot must appear in the server's member list (offline is normal): without the
+    `bot` scope only the Activity is installed and the bot sees no servers.
 14. `npm run deploy` (also creates the PresenceHub Durable Object).
 Without the token the hub never connects and nobody gets bubbles; everything else works. Members who turned off
 "Share my activity" in Discord never get a bubble. Statuses live in memory only (never in D1).

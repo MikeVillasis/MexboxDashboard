@@ -83,8 +83,6 @@ async function route(pathname: string, request: Request, env: Env): Promise<Resp
   }
 
   if (pathname === "/api/health") return json({ ok: true });
-  // Temporary: thought-bubble troubleshooting (counts and error codes only).
-  if (pathname === "/api/presence/health") return json(await env.PRESENCE.get(env.PRESENCE.idFromName("hub")).health());
 
   throw new HttpError(404, "not_found");
 }
