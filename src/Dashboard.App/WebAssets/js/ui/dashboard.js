@@ -33,6 +33,7 @@ export class Dashboard extends EventTarget {
   /// options.blades: names the host supports (null = all). Others stay in the DOM, hidden, so their elements still resolve.
   /// options.inputHints: "controller" (default) or "keyboard" footer.
   /// options.manualFriends: false hides "add a friend" (hosts where everyone present is connected automatically).
+  /// options.cameraControls: the plaza has a free camera; its hints show on the friends blade.
   constructor(backend, options = {}) {
     super();
     this.backend = backend;
@@ -51,6 +52,7 @@ export class Dashboard extends EventTarget {
     this.soundEnabled = true;
     this.lastPointer = null;
     this.collapsed = false;
+    this.cameraControls = Boolean(options.cameraControls);
     this.focusedAvatarId = null; // friend/resident the camera is following (friends blade)
     const input = options.inputHints === "keyboard" ? "keyboard" : "controller";
     for (const footer of document.querySelectorAll(".hints[data-input]")) footer.hidden = footer.dataset.input !== input;
@@ -177,6 +179,7 @@ export class Dashboard extends EventTarget {
     set("y", blade === "media" ? "next track" : blade === "games" ? "cover art" : "");
     for (const el of hints("dpad")) el.hidden = blade !== "avatar";
     for (const el of hints("hide")) el.hidden = blade !== "friends";
+    for (const el of hints("camera")) el.hidden = !(this.cameraControls && blade === "friends");
   }
 
   /// Slides the blades off to the left so the plaza is on its own; a handle on the left edge brings them back.
@@ -185,6 +188,7 @@ export class Dashboard extends EventTarget {
     this.collapsed = collapsed;
     $("dashboard-ui").classList.toggle("collapsed", collapsed);
     $("expand-ui").hidden = !collapsed;
+    $("camera-tips").hidden = !(collapsed && this.cameraControls); // the footer hides with the menu; keep these
     this.sound(collapsed ? "BladeSwoosh" : "Back");
     this.dispatchEvent(new CustomEvent("collapsechange", { detail: { collapsed } }));
   }

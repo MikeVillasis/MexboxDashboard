@@ -162,11 +162,18 @@
       <span data-hint="dpad" hidden><kbd>&#x2191;</kbd><kbd>&#x2193;</kbd>pick<kbd>&#x2190;</kbd><kbd>&#x2192;</kbd>change</span>
       <span><kbd>q</kbd><kbd>e</kbd>switch blades</span>
       <span data-hint="hide" hidden><kbd>h</kbd>hide menu</span>
+      <span data-hint="camera" hidden><kbd>drag</kbd>move<kbd>scroll</kbd>zoom<kbd>r</kbd>reset view</span>
       <span><kbd>g</kbd>gamercard</span>
     </footer>
 
     <!-- Credit for the current sky preset, when it has one (bottom left of the plaza). -->
     <div id="sky-credit" class="sky-credit interactive" hidden></div>
+
+    <!-- Camera tips while the menu is hidden (hosts with the free camera): keys on desktop, gestures on touch. -->
+    <div id="camera-tips" class="camera-tips" hidden>
+      <span class="tips-fine"><kbd>drag</kbd>move<kbd>scroll</kbd>zoom<kbd>click</kbd>walk<kbd>r</kbd>reset<kbd>h</kbd>menu</span>
+      <span class="tips-touch">drag to move &middot; pinch to zoom &middot; tap to walk</span>
+    </div>
 
     <!-- Collapsed UI: only this handle stays, on the left edge, to bring the blades back. -->
     <button id="expand-ui" class="expand-handle interactive" hidden title="show the menu">menu &#x25B6;</button>

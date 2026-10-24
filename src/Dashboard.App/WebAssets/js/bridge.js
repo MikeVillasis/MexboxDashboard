@@ -14,6 +14,7 @@
 //             awayAsleep: friends who aren't connected nap in place instead of roaming as NPCs.
 //             inputHints: "keyboard" or "controller" (default) footer hints.
 //             manualFriends: false hides "add a friend" by code (everyone present is connected automatically).
+//             cameraControls: free camera on the plaza view (drag the ground, wheel/pinch zoom, RESET_VIEW).
 //             quality: plaza render tier, "high" (default) | "medium" | "low" | "auto" (see js/scene/Quality.js).
 //
 // BACKEND CONTRACT (method names match C# XboxHostBridge; a host may leave out what it can't do, callers use ?.):
@@ -64,6 +65,7 @@
     inputHints: (host && host.inputHints) || "controller",
     quality: (host && host.quality) || "high",
     manualFriends: !(host && host.manualFriends === false),
+    cameraControls: Boolean(host && host.cameraControls),
 
     backend: host ? host.backend : null,
 

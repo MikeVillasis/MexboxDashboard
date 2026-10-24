@@ -186,6 +186,7 @@ function mapKey(key, shift) {
     case "y": case "Y": return ["ACTION_Y", null];
     case "g": case "G": return ["OPEN_GAMERCARD", null];
     case "h": case "H": return ["TOGGLE_UI", null];
+    case "r": case "R": return ["RESET_VIEW", null];
   }
   return null;
 }
@@ -197,6 +198,7 @@ window.XboxHostAdapter = {
   awayAsleep: true,
   inputHints: "keyboard",
   manualFriends: false, // everyone in the Activity is in the room already; codes only identify people
+  cameraControls: true,  // drag the plaza ground to move, wheel/pinch to zoom, R to reset
   // Discord passes ?platform=mobile|desktop in the Activity URL: phones start on the light tier, desktops adapt.
   quality: new URLSearchParams(location.search).get("platform") === "mobile" ? "low" : "auto",
   /** Called by main.js after HOST_READY (so sign-in is done): the shared room for this Activity instance. */

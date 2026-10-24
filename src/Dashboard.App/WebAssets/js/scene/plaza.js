@@ -8,7 +8,8 @@ import { PlazaAI } from "../avatar/AvatarAI.js";
 import { FrameMonitor, TIERS, TIER_ORDER } from "./Quality.js";
 import { DEFAULT_SKY, SkyDome, SKIES } from "./Sky.js";
 
-const DRAG_THRESHOLD = 6; // px of pointer travel before a press on an avatar becomes a grab
+const DRAG_THRESHOLD = 6; // px of pointer travel before a press becomes a grab (avatar) or a camera drag (ground)
+const GROUND = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
 // Lights for tinted (classic) skies; the blade tint supplies sky, floor and light colours on top.
 const CLASSIC_LIGHTS = { ground: 0x0a1a05, sun: 0xffffff, sunIntensity: 1.7, hemiIntensity: 1.1 };
@@ -24,12 +25,18 @@ const BLADE_TINT = {
 export class Plaza {
   /// callbacks: { floorClick(x, z), avatarClick(dna) }
   /// options.quality: "high" (default), "medium", "low", or "auto" (start high, step down while frames are slow).
-  constructor(canvas, callbacks = {}, { quality = "high" } = {}) {
+  /// options.cameraControls: on the plaza view, drag the ground to move the camera, wheel/pinch to zoom (clicks on the
+  /// ground still walk your avatar, on release).
+  constructor(canvas, callbacks = {}, { quality = "high", cameraControls = false } = {}) {
     this.canvas = canvas;
     this.callbacks = callbacks;
     this.ai = new PlazaAI();
     this.ai.onEvent = (event, a, b) => callbacks.plazaEvent?.(event, a.avatar, b?.avatar);
     this.press = null; // pointer press in progress: { avatar, x, y, grabbed }
+    this.cameraControls = cameraControls;
+    this.pan = null;     // ground drag in progress: { id, x, y, moved, point, view, start, startPan }
+    this.touches = new Map(); // touch pointers down on the canvas (two of them = pinch)
+    this.pinch = null;   // { distance, zoom }
     this.clock = new THREE.Clock();
     this.avatars = new Map(); // id → Avatar
     this.local = null;
@@ -83,6 +90,7 @@ export class Plaza {
     canvas.addEventListener("pointermove", (e) => this.onPointerMove(e));
     canvas.addEventListener("pointerup", (e) => this.onPointerUp(e));
     canvas.addEventListener("pointercancel", (e) => this.onPointerUp(e));
+    canvas.addEventListener("wheel", (e) => this.onWheel(e), { passive: false });
     window.addEventListener("resize", () => this.resize());
     document.addEventListener("visibilitychange", () => this.setRunning(!document.hidden));
     this.resize();
@@ -271,8 +279,64 @@ export class Plaza {
 
   floorPoint() { return this.raycaster.intersectObject(this.floor)[0]?.point ?? null; }
 
+  // ───────────── Free camera (plaza view) ─────────────
+
+  get freeCamera() { return this.cameraControls && this.blade === "friends"; }
+
+  /// Where the pointer meets the ground plane as seen by 'camera' (the plane, not the floor mesh: works past its edge).
+  groundUnder(event, camera) {
+    const rect = this.canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, camera);
+    return ray.ray.intersectPlane(GROUND, new THREE.Vector3());
+  }
+
+  /// Drag the ground: the point grabbed stays under the pointer. Measured against the camera as it was when the drag
+  /// began, so moving the camera (a pure translation) never feeds back into the measurement.
+  panDrag(event) {
+    const pan = this.pan;
+    const point = this.groundUnder(event, pan.view);
+    if (!point || !pan.start) return;
+    this.director.panTo(pan.startPan.clone().add(pan.start).sub(point));
+  }
+
+  onWheel(event) {
+    if (!this.freeCamera) return;
+    event.preventDefault();
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? 400 : 1; // lines / pages → pixels
+    // Pinch on a trackpad arrives as a ctrl+wheel with small deltas; mouse wheels and two-finger scrolls don't.
+    const strength = event.ctrlKey ? 0.012 : 0.0015;
+    this.director.zoomBy(Math.exp(event.deltaY * unit * strength));
+    // Sideways two-finger swipes move the camera sideways.
+    if (!event.ctrlKey && Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+      this.director.panTo(this.director.userPan.clone().add(new THREE.Vector3(event.deltaX * unit * 0.02, 0, 0)));
+    }
+    this.callbacks.cameraMoved?.();
+  }
+
+  resetView() { this.director.resetView(); }
+
+  /// A tap/click on the ground (no drag): the walk marker and your avatar heads there.
+  floorClicked(point) {
+    this.marker.position.set(point.x, 0.01, point.z);
+    this.marker.material.opacity = 1;
+    this.marker.scale.setScalar(0.4);
+    this.callbacks.floorClick?.(point.x, point.z);
+  }
+
   onPointerDown(event) {
     if (event.button !== 0) return;
+    if (event.pointerType === "touch" && this.freeCamera) {
+      this.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (this.touches.size === 2) { // second finger: pinch to zoom; whatever the first finger started is cancelled
+        this.endPan(event);
+        this.press = null;
+        const [a, b] = [...this.touches.values()];
+        this.pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y), zoom: this.director.userZoom };
+        return;
+      }
+    }
     this.setPointer(event);
     const avatar = this.pickAvatar();
     const agent = avatar && this.ai.get(avatar);
@@ -287,14 +351,52 @@ export class Plaza {
       return;
     }
     const point = this.floorPoint();
-    if (!point) return;
-    this.marker.position.set(point.x, 0.01, point.z);
-    this.marker.material.opacity = 1;
-    this.marker.scale.setScalar(0.4);
-    this.callbacks.floorClick?.(point.x, point.z);
+    if (this.freeCamera) {
+      // Ground press: a drag moves the camera; a click (released without moving) still walks your avatar there.
+      this.pan = {
+        id: event.pointerId, x: event.clientX, y: event.clientY, moved: false, point,
+        view: this.camera.clone(), start: this.groundUnder(event, this.camera), startPan: null,
+      };
+      try { this.canvas.setPointerCapture(event.pointerId); } catch { /* pointer already gone */ }
+      return;
+    }
+    if (point) this.floorClicked(point);
+  }
+
+  endPan(event) {
+    const pan = this.pan;
+    if (!pan) return;
+    this.pan = null;
+    this.director.direct = false;
+    if (this.canvas.hasPointerCapture(pan.id)) this.canvas.releasePointerCapture(pan.id);
+    this.canvas.style.cursor = "";
+    return pan;
   }
 
   onPointerMove(event) {
+    if (this.touches.has(event.pointerId)) this.touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (this.pinch && this.touches.size === 2) {
+      const [a, b] = [...this.touches.values()];
+      this.director.setZoom(this.pinch.zoom * this.pinch.distance / Math.max(1, Math.hypot(a.x - b.x, a.y - b.y)));
+      this.callbacks.cameraMoved?.();
+      return;
+    }
+    const pan = this.pan;
+    if (pan && event.pointerId === pan.id) {
+      if (!pan.moved && Math.hypot(event.clientX - pan.x, event.clientY - pan.y) > DRAG_THRESHOLD) {
+        pan.moved = true;
+        this.director.beginUserControl(); // leaves follow mode / stops the drift without a jump
+        this.director.applyShot();
+        pan.view = this.director.viewCamera(); // measure against the intended view (the camera snaps to it while dragging)
+        pan.start = this.groundUnder({ clientX: pan.x, clientY: pan.y }, pan.view); // the point under the press, not the threshold
+        pan.startPan = this.director.userPan.clone();
+        this.director.direct = true;
+        this.canvas.style.cursor = "grabbing";
+        this.callbacks.cameraMoved?.();
+      }
+      if (pan.moved) this.panDrag(event);
+      return;
+    }
     const press = this.press;
     if (!press) {
       // Hover feedback: a grab cursor over avatars.
@@ -316,6 +418,17 @@ export class Plaza {
   }
 
   onPointerUp(event) {
+    this.touches.delete(event.pointerId);
+    if (this.pinch) {
+      if (this.touches.size < 2) this.pinch = null;
+      return;
+    }
+    if (this.pan && event.pointerId === this.pan.id) {
+      if (this.pan.moved && event.type === "pointerup") this.panDrag(event); // land exactly where the pointer let go
+      const pan = this.endPan(event);
+      if (!pan.moved && event.type === "pointerup" && pan.point) this.floorClicked(pan.point);
+      return;
+    }
     const press = this.press;
     if (!press) return;
     this.press = null;

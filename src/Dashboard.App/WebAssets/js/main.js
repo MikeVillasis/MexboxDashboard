@@ -6,7 +6,7 @@ import { NetworkManager } from "./net/NetworkManager.js";
 import { DEFAULT_SKY, SKIES } from "./scene/Sky.js";
 
 const backend = Xbox.backend;
-const dashboard = new Dashboard(backend, { blades: Xbox.blades, inputHints: Xbox.inputHints, manualFriends: Xbox.manualFriends });
+const dashboard = new Dashboard(backend, { blades: Xbox.blades, inputHints: Xbox.inputHints, manualFriends: Xbox.manualFriends, cameraControls: Xbox.cameraControls });
 const report = (event, avatar, other) => Xbox.send("PLAZA_EVENT", { event, id: avatar?.id, with: other?.id ?? null });
 const plaza = new Plaza(document.getElementById("viewport-3d"), {
   // A floor click sends your avatar walking there (and tells your friends, so theirs walks too).
@@ -15,7 +15,9 @@ const plaza = new Plaza(document.getElementById("viewport-3d"), {
   grab: (avatar) => { report("grab", avatar); backend?.PlaySound("Select"); },
   drop: (avatar) => { report("drop", avatar); backend?.PlaySound("Back"); },
   plazaEvent: report,
-}, { quality: Xbox.quality });
+  // You took the camera (drag/zoom): stop following whoever was selected in the friends list.
+  cameraMoved: () => dashboard.focusAvatar(null),
+}, { quality: Xbox.quality, cameraControls: Xbox.cameraControls });
 
 dashboard.addEventListener("bladechange", (e) => plaza.setBlade(e.detail.blade));
 
@@ -161,6 +163,8 @@ if (backend) {
     if (p.plazaSelfTest) { selfTest = true; plaza.setRunning(true); setTimeout(plazaSelfTest, 8000); }
   });
   Xbox.on("LIBRARY_CHANGED", loadLibrary);
+  // Back to the authored plaza framing (key R in the Activity).
+  Xbox.on("RESET_VIEW", () => { dashboard.focusAvatar(null); plaza.resetView(); });
   // Hosts with a presence feed (the Discord Activity) report what members are playing / listening to: a thought
   // bubble over their avatar, yours included, and a line in the friends list.
   Xbox.on("FRIEND_STATUS", ({ code, status }) => {

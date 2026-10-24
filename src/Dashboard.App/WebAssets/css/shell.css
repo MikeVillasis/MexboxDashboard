@@ -495,6 +495,31 @@ kbd {
 }
 .expand-handle:hover { box-shadow: 0 0 22px rgba(255, 255, 255, 0.55); }
 
+/* Camera tips on the HUD while the menu is hidden: a small pill, bottom centre. */
+.camera-tips {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  font-size: 13px;
+  white-space: nowrap;
+  animation: fade-in 0.3s 0.25s both;
+}
+.camera-tips span { display: flex; align-items: center; gap: 6px; }
+.camera-tips kbd { margin-left: 6px; }
+.camera-tips kbd:first-child { margin-left: 0; }
+.camera-tips .tips-touch { display: none; }
+@media (pointer: coarse) {
+  .camera-tips .tips-fine { display: none; }
+  .camera-tips .tips-touch { display: flex; }
+}
+/* Leave the credit its corner: on narrow screens the tips sit above it. */
+@media (max-width: 760px) { .camera-tips { bottom: 36px; font-size: 12px; } }
+
 /* ═══════════════ Gamercard ═══════════════ */
 .gamercard {
   position: absolute;
