@@ -333,6 +333,175 @@ const OCEAN_SHADER = {
     }`,
 };
 
+// "Night alley": the plaza as the courtyard at the bottom of a well of old apartment blocks, reproduced from a photo by
+// cheng feng on Unsplash (credited in-app while the preset is on). The wall is a ring of building fronts: shuttered
+// shops and blue-lit doorways at street level, then floors of barred balconies and awnings washed in pink and blue neon,
+// a few windows glowing, star-flared lamps; the floor pools their light. Above the uneven rooftops, a moonlit night sky.
+const ALLEY_BUILDINGS = 14; // round the wall, ~10.8 m each
+const ALLEY_SCALE = 0.65;   // fronts drawn a little small, so the plaza camera sees several floors of balconies
+
+const ALLEY_SHADER = {
+  uniforms: {
+    uTime: { value: 0 },
+    uDetail: { value: 1 },  // 0 on the low quality tier: no grilles, bars or clouds
+    uMode: { value: 0 },    // 0 dome (night sky), 1 wall (building fronts), 2 floor (pooled neon, the moon reflected)
+    uCam: { value: new THREE.Vector3() }, // the floor reflects the moon along the camera's mirror ray
+    uWallHeight: { value: 16 },
+    uWallRadius: { value: 24 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec3 vPos;
+    void main() {
+      vPos = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */ `
+    #define TAU 6.28318530718
+    #define BUILDINGS ${ALLEY_BUILDINGS}.0
+    #define SCALE ${ALLEY_SCALE}
+    uniform float uTime;
+    uniform float uDetail;
+    uniform float uMode;
+    uniform float uWallHeight;
+    uniform float uWallRadius;
+    uniform vec3 uCam;
+    varying vec3 vPos;
+
+    const vec3 PINK = vec3(1.0, 0.10, 0.38);
+    const vec3 BLUE = vec3(0.10, 0.40, 1.0);
+    const vec3 MOON = vec3(0.1046, 0.4793, -0.8714); // normalize(0.12, 0.55, -1): low over the building ahead
+
+    float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+    float noise(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), f.x), f.y);
+    }
+    float azimuth(vec3 p) { return atan(p.x, -p.z) / TAU + 0.5; } // 0.5 straight ahead (-Z)
+
+    // A building's neon: most are washed pink from the street, some blue.
+    vec3 washOf(float id) { return hash(vec2(id, 1.7)) > 0.68 ? BLUE : PINK; }
+
+    // A star-flared lamp at 'c' (metres on the wall): a hot core, a glow and four thin rays.
+    vec3 lamp(vec2 p, vec2 c, vec3 tint) {
+      vec2 d = abs(p - c);
+      float rays = exp(-d.y * 14.0) * exp(-d.x * 1.6) + exp(-d.x * 14.0) * exp(-d.y * 1.6);
+      float glow = exp(-length(d) * 1.4);
+      return tint * (glow * 1.2 + rays * 1.1) + vec3(1.0, 0.85, 0.95) * smoothstep(0.25, 0.06, length(d));
+    }
+
+    vec3 facade(float id, float x, float y, float width) {
+      float h = hash(vec2(id, 9.1));
+      vec3 wash = washOf(id);
+      vec3 other = wash == PINK ? BLUE : PINK;
+      float lift = 1.0 - smoothstep(0.0, uWallHeight, y) * 0.7; // the street light fades going up
+      vec3 col = vec3(0.03, 0.025, 0.06) + wash * 0.07 * lift;
+      float px = max(fwidth(y), 1e-3);
+
+      if (y < 3.6) { // street level: shutters or a lit doorway in each 3.6 m bay
+        float bays = floor(width / 3.6);
+        float bx = x / width * bays;
+        float bay = floor(bx), lx = fract(bx);
+        float kind = hash(vec2(id * 5.0 + bay, 2.0));
+        float open = step(0.08, lx) * step(lx, 0.92) * step(y, 3.0);
+        if (kind > 0.7) { // a doorway into a blue-lit passage
+          col = mix(col, BLUE * mix(0.9, 0.35, y / 3.0) + vec3(0.05), open);
+        } else { // a roller shutter catching the neon
+          float slats = uDetail > 0.5 ? 0.75 + 0.25 * smoothstep(0.3, 0.0, abs(fract(y * 6.0) - 0.5) - 0.2 + px * 6.0) : 0.85;
+          col = mix(col, wash * 0.22 * slats * mix(1.0, 0.45, y / 3.0) + vec3(0.035, 0.03, 0.055), open);
+          // and over some, a small shop sign
+          float sign = step(0.45, kind) * step(0.25, lx) * step(lx, 0.75) * step(2.55, y) * step(y, 2.9);
+          col = mix(col, (kind > 0.6 ? BLUE : PINK) * 1.3 + vec3(0.3), sign);
+        }
+        col = mix(col, wash * 1.1, smoothstep(px * 2.0 + 0.06, 0.0, abs(y - 3.3))); // a neon strip over the shops
+      } else { // floors above: balconies under glowing awnings, some windows lit
+        float fy = (y - 3.6) / 3.0;
+        float level = floor(fy), ly = fract(fy);
+        float bays = max(2.0, floor(width / 3.2));
+        float bx = x / width * bays;
+        float bay = floor(bx), lx = fract(bx);
+        float cell = hash(vec2(id * 17.0 + bay, level));
+        vec3 tint = hash(vec2(id + bay, level + 4.0)) > 0.8 ? other : wash; // the odd balcony lit the other colour
+        // Balcony front: a cage of bars over the bay's lower half, lit from below.
+        float cage = step(0.04, lx) * step(lx, 0.96) * step(ly, 0.55);
+        float bars = uDetail > 0.5 ? smoothstep(0.12, 0.0, abs(fract(lx * 9.0) - 0.5) - 0.38 + px * 4.0) : 0.4;
+        col += tint * cage * (0.12 + bars * 0.35) * lift;
+        // Awning: a bright slanted band along the top of each floor.
+        float awning = smoothstep(0.0, 0.05, ly - 0.82) * smoothstep(1.0, 0.95, ly) * step(0.03, lx) * step(lx, 0.97);
+        col += tint * awning * (0.9 + 0.5 * (1.0 - ly)) * lift;
+        // Windows behind: a few glowing pink or blue, the rest dark with grilles.
+        float win = step(0.2, lx) * step(lx, 0.8) * step(0.58, ly) * step(ly, 0.8);
+        if (cell > 0.86) col = mix(col, (cell > 0.95 ? BLUE : PINK) * 1.4 + vec3(0.25, 0.15, 0.2), win);
+        else col = mix(col, vec3(0.015, 0.02, 0.05) + tint * 0.05, win * 0.8);
+        // An air-conditioner box on some bays.
+        float ac = step(0.97, cell + 0.1 * step(0.6, h)) * step(0.62, lx) * step(lx, 0.86) * step(0.6, ly) * step(ly, 0.76);
+        col = mix(col, vec3(0.5, 0.42, 0.55) * lift, ac * 0.8);
+      }
+      // A drainpipe down one side of some buildings, catching blue.
+      if (h > 0.5) col = mix(col, BLUE * 0.55 + vec3(0.03), smoothstep(0.22, 0.12, abs(x - width * 0.06)));
+      // A dark gap between neighbours.
+      col *= smoothstep(0.0, 0.25, min(x, width - x));
+      // Lamps on a few buildings.
+      if (h < 0.3) col += lamp(vec2(x, y), vec2(width * (0.25 + h), 4.4), PINK);
+      return col;
+    }
+
+    void main() {
+      float az = azimuth(vPos);
+
+      if (uMode < 0.5) { // night sky: deep blue, moonlit clouds, the moon low over the building ahead
+        vec3 d = normalize(vPos);
+        float ang = acos(clamp(dot(d, MOON), -1.0, 1.0));
+        vec3 col = mix(vec3(0.04, 0.07, 0.2), vec3(0.01, 0.02, 0.08), smoothstep(0.0, 0.9, d.y));
+        if (uDetail > 0.5) {
+          vec2 cp = d.xz / max(d.y + 0.15, 0.1) * 1.4 + vec2(uTime * 0.01, 0.0);
+          float c = smoothstep(0.5, 0.85, noise(cp) * 0.6 + noise(cp * 2.3) * 0.3 + noise(cp * 5.1) * 0.1);
+          col = mix(col, mix(vec3(0.05, 0.08, 0.22), vec3(0.42, 0.52, 0.85), exp(-ang * 3.0)), c * 0.8);
+        }
+        col += vec3(0.3, 0.42, 0.85) * exp(-ang * 6.0) * 0.45;
+        col = mix(col, vec3(1.0, 0.98, 0.95), smoothstep(0.05, 0.043, ang));
+        gl_FragColor = vec4(col, 1.0);
+        return;
+      }
+
+      float width = TAU * uWallRadius / BUILDINGS;
+      float u = az * BUILDINGS;
+      float id = floor(u);
+      float x = fract(u) * width;
+
+      if (uMode > 1.5) { // floor: each building's neon pooled at its foot, doorways' blue and lamps reflected
+        float r = length(vPos.xz);
+        float near = smoothstep(uWallRadius * 0.4, uWallRadius, r);
+        float puddle = uDetail > 0.5 ? smoothstep(0.5, 0.75, noise(vPos.xz * 0.22)) : 0.0; // wet patches mirror more
+        vec3 pool = washOf(id) * (0.5 * near * near + 0.18 * puddle * near);
+        float h = hash(vec2(id, 9.1));
+        if (h < 0.3) pool += PINK * exp(-abs(x - width * (0.25 + h)) * 1.2) * near * near * near * 0.7;
+        pool *= smoothstep(0.0, 0.6, min(x, width - x));
+
+        // The moon in the wet ground: mirror the view ray off a softly rippling floor. Puddles hold a crisp,
+        // shimmering disc; the damp stone between them only a blurred glow.
+        vec2 q = vPos.xz;
+        vec3 n = vec3(0.0, 1.0, 0.0);
+        if (uDetail > 0.5) {
+          n.x += 0.008 * sin(q.x * 5.3 + uTime * 1.6 + 1.3 * sin(q.y * 2.3 - uTime * 0.9));
+          n.z += 0.008 * sin(q.y * 6.1 - uTime * 1.3 + 1.3 * sin(q.x * 1.9 + uTime * 0.7));
+        }
+        vec3 mirror = reflect(normalize(vPos - uCam), normalize(n));
+        float ang = acos(clamp(dot(mirror, MOON), -1.0, 1.0));
+        float wet = mix(0.3, 1.0, puddle);
+        vec3 moonlight = vec3(0.82, 0.88, 1.0) * (smoothstep(0.055, 0.04, ang) * wet * 0.75 + exp(-ang * 18.0) * 0.25 + exp(-ang * 6.0) * 0.05);
+        gl_FragColor = vec4(pool + moonlight, 1.0);
+        return;
+      }
+
+      // Wall: uneven rooftops (the building straight ahead is the lowest, as in the photo); above them, the sky shows.
+      float roof = uWallHeight - 1.0 - hash(vec2(id, 3.3)) * 5.0;
+      if (abs(u - BUILDINGS * 0.5 + 0.5) < 0.5) roof = uWallHeight * 0.62;
+      if (vPos.y > roof) discard;
+      gl_FragColor = vec4(facade(id, x / SCALE, vPos.y / SCALE, width / SCALE), 1.0);
+    }`,
+};
+
 export const SKIES = {
   classic: { label: "classic", tinted: true },
   neon: {
@@ -368,6 +537,17 @@ export const SKIES = {
     credit: {
       html: 'Photo by <a href="https://unsplash.com/@cristianpalmer?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Cristian Palmer</a> on ' +
         '<a href="https://unsplash.com/photos/clear-blue-body-of-water-XexawgzYOBc?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>',
+    },
+  },
+  alley: {
+    label: "night alley",
+    tinted: false,
+    shader: ALLEY_SHADER,
+    ringInner: 0, // the moon's reflection lands mid-plaza
+    look: { sky: 0x0c0a1e, floor: 0x2a1d38, light: 0x7d8cff, ground: 0x6a1440, sun: 0xc6d4ff, sunIntensity: 0.9, hemiIntensity: 1.15 },
+    credit: {
+      html: 'Photo by <a href="https://unsplash.com/@chengfengrecord?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">cheng feng</a> on ' +
+        '<a href="https://unsplash.com/photos/apartment-buildings-in-neon-alley-psdV2Rl-GvU?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>',
     },
   },
 };
