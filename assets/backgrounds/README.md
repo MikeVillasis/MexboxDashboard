@@ -9,3 +9,6 @@ loaded at runtime (the skies are shaders); they're kept here so the look can be 
 - `img/city-night.jpg` → the "city night" sky. Photo by [MF Evelyn](https://unsplash.com/@liaoweimeifang?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
   on [Unsplash](https://unsplash.com/photos/aerial-photo-of-city-QifOXDApdsw?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
   ([Unsplash License](https://unsplash.com/license)). Credited in the plaza while that sky is on.
+- `img/ocean.jpg` → the "ocean" sky. Photo by [Cristian Palmer](https://unsplash.com/@cristianpalmer?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
+  on [Unsplash](https://unsplash.com/photos/clear-blue-body-of-water-XexawgzYOBc?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
+  ([Unsplash License](https://unsplash.com/license)). Credited in the plaza while that sky is on.

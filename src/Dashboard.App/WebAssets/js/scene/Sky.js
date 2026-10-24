@@ -2,8 +2,9 @@
 // backdrops (shaders, no textures, nothing to download) with its own fixed look for the fog, floor and lights:
 //   dome   an inverted sphere that follows the camera (the far sky)
 //   wall   an open cylinder standing on the floor round the plaza: what the elevated plaza camera actually sees
-//   floor  an additive ring on the floor in front of the wall: the lines' glow and reflections
-// Each preset picks its parts and may shrink the plaza floor (floorScale: the plaza as a rooftop).
+//   floor  an additive ring on the floor in front of the wall: glow, reflections or caustics
+// Each preset picks its parts and may shrink the plaza floor (floorScale: the plaza as a rooftop) or widen the floor
+// layer into a full disc (ringInner: 0).
 // Plaza.setSky() switches presets; the plaza menu lists them.
 import * as THREE from "three";
 
@@ -226,6 +227,112 @@ const CITY_SHADER = {
     }`,
 };
 
+// "Ocean": the plaza sits on the sea floor, reproduced from an underwater photo by Cristian Palmer on Unsplash (credited
+// in-app while the preset is on). Overhead, each view ray meets the wavy surface far above, dark teal crossed by bright
+// ripple crests and sparkles; a bright cyan band hangs just under it, light shafts fan down into deep navy, specks
+// drift up through the water, and caustics play across the floor.
+const OCEAN_SHADER = {
+  uniforms: {
+    uTime: { value: 0 },
+    uDetail: { value: 1 },                // 0 on the low quality tier: no specks, sparkles or second ripple layer
+    uMode: { value: 0 },                  // 0 dome (water and surface), 2 floor caustics
+    uCam: { value: new THREE.Vector3() }, // the surface stays put while the dome follows the camera
+    uWallRadius: { value: 24 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec3 vPos;
+    void main() {
+      vPos = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */ `
+    #define TAU 6.28318530718
+    uniform float uTime;
+    uniform float uDetail;
+    uniform float uMode;
+    uniform vec3 uCam;
+    uniform float uWallRadius;
+    varying vec3 vPos;
+
+    const float SURFACE = 40.0;  // the sea surface this far above the floor
+    const vec3 DEEP = vec3(0.004, 0.035, 0.075);
+    const vec3 MID = vec3(0.015, 0.26, 0.40);
+    const vec3 GLOW = vec3(0.12, 0.78, 0.90);
+
+    float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+
+    // Thin bright lines where three warped sine fields cancel: a caustic / ripple-crest network, 0..1.
+    float ripples(vec2 p, float t) {
+      float w = sin(p.x * 1.3 + t + 1.5 * sin(p.y * 0.9 - t * 0.7))
+              + sin(p.y * 1.1 - t * 0.8 + 1.5 * sin(p.x * 0.7 + t * 0.5))
+              + sin((p.x + p.y) * 0.8 + t * 0.6);
+      return pow(1.0 - abs(w) / 3.0, 8.0);
+    }
+
+    float azimuth(vec3 p) { return atan(p.x, -p.z) / TAU + 0.5; } // 0.5 straight ahead (-Z)
+
+    void main() {
+      if (uMode > 1.5) { // floor caustics, fading out before the edge of the ring
+        vec2 p = vPos.xz;
+        float c = ripples(p * 1.3, uTime * 0.6);
+        if (uDetail > 0.5) c = c * 0.6 + ripples(p * 2.1 + 3.1, uTime * 0.75) * 0.5;
+        float fade = smoothstep(uWallRadius, uWallRadius * 0.6, length(p));
+        gl_FragColor = vec4(vec3(0.30, 0.85, 1.0) * c * fade * 0.2, 1.0);
+        return;
+      }
+
+      vec3 d = normalize(vPos);
+      float el = d.y;
+      float az = azimuth(vPos);
+
+      // Water: deep navy below, mid teal, then the bright band just under the surface's far edge.
+      vec3 col = mix(DEEP, MID, smoothstep(-0.75, -0.05, el));
+      col = mix(col, GLOW, smoothstep(-0.12, 0.06, el) * (1.0 - smoothstep(0.06, 0.3, el)) * 0.85);
+
+      // The surface from below: dark teal, bright crests and sparkles, washing into the glow with distance.
+      if (el > 0.02) {
+        float t = max(SURFACE - uCam.y, 5.0) / el;
+        vec2 p = uCam.xz + d.xz * t;
+        float px = max(fwidth(p.x), fwidth(p.y));
+        float near = smoothstep(3.0, 0.4, px);
+        float crest = ripples(p * 0.11, uTime * 0.35);
+        if (uDetail > 0.5) crest = max(crest, ripples(p * 0.27 + 7.0, uTime * 0.5) * 0.6 * near);
+        vec3 surface = mix(vec3(0.02, 0.22, 0.34), vec3(0.06, 0.40, 0.55), 0.5 + 0.5 * sin(p.x * 0.05 + p.y * 0.04 + uTime * 0.2));
+        surface += vec3(0.55, 0.92, 1.0) * crest * mix(0.15, 0.45, near);
+        if (uDetail > 0.5) { // sun glints: tiny twinkling points on the crests
+          vec2 gp = p * 0.6;
+          vec2 g = floor(gp);
+          float glint = step(0.97, hash(g)) * smoothstep(0.1, 0.0, length(fract(gp) - 0.5))
+                      * max(0.0, sin(uTime * 3.0 + hash(g + 1.0) * 30.0));
+          surface += vec3(1.0, 0.95, 0.9) * glint * near * 1.5;
+        }
+        surface = mix(surface, vec3(0.30, 0.75, 0.88), smoothstep(0.35, 0.0, el) * 0.35); // Snell's window edge: brighter at grazing
+        col = mix(surface, col, smoothstep(150.0, 900.0, t));
+      }
+
+      // Light shafts: soft bands fanning down from the surface, swaying slowly, brightest ahead of the plaza.
+      float a = az * TAU;
+      float shafts = pow(0.5 + 0.5 * sin(a * 23.0 + 2.0 * sin(a * 7.0 + uTime * 0.15) + uTime * 0.05), 3.0)
+                   * (0.6 + 0.4 * sin(a * 41.0 - uTime * 0.08 + 1.7));
+      float shaftEl = smoothstep(-0.7, 0.05, el) * (1.0 - smoothstep(0.05, 0.25, el));
+      float ahead = 0.55 + 0.45 * cos((az - 0.5) * TAU);
+      col += vec3(0.20, 0.70, 0.80) * shafts * shaftEl * ahead * 0.22;
+
+      // Specks and bubbles drifting up, more of them catching the light near the surface.
+      if (uDetail > 0.5 && el < 0.5) {
+        vec2 grid = vec2(az * 260.0, el * 130.0);
+        float column = floor(grid.x);
+        grid.y -= uTime * (0.3 + 0.5 * hash(vec2(column, 4.0)));
+        vec2 cell = floor(grid);
+        vec2 f = fract(grid) - vec2(hash(cell), hash(cell + 2.3));
+        float on = step(0.9, hash(cell + 5.1));
+        float speck = on * smoothstep(0.09, 0.0, length(f * vec2(1.0, 0.5)));
+        col += vec3(0.75, 0.95, 1.0) * speck * mix(0.25, 0.9, smoothstep(-0.6, 0.15, el));
+      }
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+};
+
 export const SKIES = {
   classic: { label: "classic", tinted: true },
   neon: {
@@ -249,6 +356,18 @@ export const SKIES = {
     credit: {
       html: 'Photo by <a href="https://unsplash.com/@liaoweimeifang?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">MF Evelyn</a> on ' +
         '<a href="https://unsplash.com/photos/aerial-photo-of-city-QifOXDApdsw?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>',
+    },
+  },
+  ocean: {
+    label: "ocean",
+    tinted: false,
+    shader: OCEAN_SHADER,
+    parts: ["dome", "floor"],
+    ringInner: 0, // caustics across the whole floor, not just a ring
+    look: { sky: 0x0b4d66, floor: 0x0d3a4a, light: 0x7fe8ff, ground: 0x062433, sun: 0xc8f6ff, sunIntensity: 1.1, hemiIntensity: 1.1 },
+    credit: {
+      html: 'Photo by <a href="https://unsplash.com/@cristianpalmer?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Cristian Palmer</a> on ' +
+        '<a href="https://unsplash.com/photos/clear-blue-body-of-water-XexawgzYOBc?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>',
     },
   },
 };
@@ -305,7 +424,7 @@ export class SkyDome {
       this.meshes.push(new THREE.Mesh(wallGeometry, material(1, { depthWrite: true }))); // hides the floor beyond it
     }
     if (parts.includes("floor")) {
-      const floorGeometry = new THREE.RingGeometry(WALL_RADIUS * 0.4, WALL_RADIUS, 96, 4).rotateX(-Math.PI / 2);
+      const floorGeometry = new THREE.RingGeometry(WALL_RADIUS * (preset.ringInner ?? 0.4), WALL_RADIUS, 96, 4).rotateX(-Math.PI / 2);
       const floor = new THREE.Mesh(floorGeometry, material(2, { side: THREE.DoubleSide, transparent: true, blending: THREE.AdditiveBlending }));
       floor.position.y = 0.01;
       floor.renderOrder = 1;
