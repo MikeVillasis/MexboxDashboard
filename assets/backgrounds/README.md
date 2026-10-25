@@ -15,3 +15,6 @@ loaded at runtime (the skies are shaders); they're kept here so the look can be 
 - `img/night-alley.jpg` → the "night alley" sky. Photo by [cheng feng](https://unsplash.com/@chengfengrecord?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
   on [Unsplash](https://unsplash.com/photos/apartment-buildings-in-neon-alley-psdV2Rl-GvU?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
   ([Unsplash License](https://unsplash.com/license)). Credited in the plaza while that sky is on.
+- `img/aurora.jpg` → the "aurora" sky. Photo by [Vincent Guth](https://unsplash.com/@vingtcent?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
+  on [Unsplash](https://unsplash.com/photos/silhouette-of-trees-near-aurora-borealis-at-night-62V7ntlKgL8?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText)
+  ([Unsplash License](https://unsplash.com/license)). Credited in the plaza while that sky is on.

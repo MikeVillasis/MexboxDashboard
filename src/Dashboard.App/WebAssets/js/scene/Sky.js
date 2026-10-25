@@ -502,6 +502,170 @@ const ALLEY_SHADER = {
     }`,
 };
 
+// "Aurora": a winter forest clearing under the northern lights, reproduced from a photo by Vincent Guth on Unsplash
+// (credited in-app while the preset is on). The dome is a starry violet night crossed by curtains of aurora: bright green
+// at their lower hem, streaked with vertical rays and fading through teal to magenta as they rise, folding and swaying
+// slowly. The wall is a ring of black spruce silhouettes (the sky shows above the treetops); the snow takes a faint
+// green glow from the lights.
+const AURORA_TREE_SPACING = 1.3; // metres between trees round the 24 m wall
+
+const AURORA_SHADER = {
+  uniforms: {
+    uTime: { value: 0 },
+    uDetail: { value: 1 },  // 0 on the low quality tier: no stars, one curtain, plain tree edges
+    uMode: { value: 0 },    // 0 dome (night sky + aurora), 1 wall (spruce silhouettes), 2 floor (the aurora reflected)
+    uCam: { value: new THREE.Vector3() }, // the floor mirrors the sky along the camera's reflected view ray
+    uWallHeight: { value: 16 },
+    uWallRadius: { value: 24 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec3 vPos;
+    void main() {
+      vPos = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }`,
+  fragmentShader: /* glsl */ `
+    #define TAU 6.28318530718
+    #define SPACING ${AURORA_TREE_SPACING}
+    uniform float uTime;
+    uniform float uDetail;
+    uniform float uMode;
+    uniform float uWallHeight;
+    uniform float uWallRadius;
+    varying vec3 vPos;
+
+    uniform vec3 uCam;
+
+    const vec3 GREEN = vec3(0.22, 1.0, 0.58);
+    const vec3 TEAL = vec3(0.12, 0.62, 0.58);
+    const vec3 PINK = vec3(1.0, 0.28, 0.62);
+    const vec3 VIOLET = vec3(0.55, 0.16, 0.62);
+
+    float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+    float noise(vec2 p) {
+      vec2 i = floor(p), f = fract(p);
+      f = f * f * (3.0 - 2.0 * f);
+      return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + 1.0), f.x), f.y);
+    }
+    float azimuth(vec3 p) { return atan(p.x, -p.z) / TAU + 0.5; } // 0.5 straight ahead (-Z)
+
+    // One aurora curtain: a hem that folds round the sky, bright just above it and fading upwards, combed into rays.
+    // Colour, as in the photo: a pink fringe along parts of the hem, vivid green, then teal into pink-violet tops.
+    vec3 curtain(float az, float el, float seed, float t) {
+      float a = az * TAU;
+      // The hem dips a little below the horizon: from the plaza camera (high, looking down) the sky shows only as a thin
+      // band over the treeline, which lies just under eye level; the curtains' bright lower edge has to fill it.
+      float hem = -0.07 + 0.04 * sin(a * 2.0 + seed + t * 0.04) + 0.03 * sin(a * 5.0 - seed * 1.7 + t * 0.07)
+                + 0.03 * (noise(vec2(az * 9.0 + seed, t * 0.05)) - 0.5);
+      float above = el - hem;
+      if (above < -0.04) return vec3(0.0);
+      float body = smoothstep(-0.04, 0.015, above) * (exp(-max(above, 0.0) * 1.7) + 0.6 * exp(-max(above, 0.0) * 9.0));
+      // Rays: thin vertical streaks drifting sideways, a few much brighter than the rest.
+      float rays = noise(vec2(az * 220.0 + t * 0.3 + seed, above * 1.5));
+      rays = 0.5 + 0.6 * pow(rays, 3.0) + 0.8 * pow(noise(vec2(az * 60.0 - t * 0.12, seed)), 5.0);
+      // Brightness varies along the curtain, so it reads as folds rather than a uniform ribbon.
+      float folds = 0.45 + 0.55 * smoothstep(0.2, 0.7, noise(vec2(az * 6.0 + seed * 3.0, t * 0.03)));
+      vec3 tint = mix(GREEN, TEAL, smoothstep(0.04, 0.3, above));
+      // Pink-violet tops, reaching lower where the curtain is "pink" (a slow patchwork along its length).
+      float pinkish = smoothstep(0.15, 0.55, noise(vec2(az * 4.0 - seed, t * 0.02 + 5.0)));
+      tint = mix(tint, mix(VIOLET, PINK, pinkish), smoothstep(mix(0.12, 0.02, pinkish), mix(0.32, 0.14, pinkish), above));
+      // Pink fringe along the very bottom of the hem on some stretches.
+      tint = mix(tint, PINK, smoothstep(0.05, -0.03, above) * (0.25 + 0.75 * pinkish));
+      return tint * body * rays * folds;
+    }
+
+    /// All the curtains seen along direction d (also used for the floor's mirror ray).
+    vec3 aurora(vec3 d, float t) {
+      float az = azimuth(d);
+      vec3 lights = curtain(az, d.y, 0.0, t);
+      if (uDetail > 0.5) {
+        lights += curtain(az + 0.13, d.y - 0.04, 2.7, t * 1.3) * 0.7;
+        lights += curtain(az + 0.41, d.y + 0.02, 5.1, t * 0.8) * 0.5;
+      }
+      // Soft roll-off instead of clipping, so the brightest folds keep their green and pink rather than going white.
+      return vec3(1.0) - exp(-lights * 1.5);
+    }
+
+    /// Twinkling stars in two sizes along direction d, down to the treeline.
+    vec3 stars(vec3 d, float az) {
+      vec3 sum = vec3(0.0);
+      for (int layer = 0; layer < 2; layer++) {
+        float scale = layer == 0 ? 700.0 : 260.0;
+        vec2 grid = vec2(az * scale * 2.0, d.y * scale);
+        vec2 cell = floor(grid);
+        float h = hash(cell + float(layer) * 17.0);
+        float star = step(layer == 0 ? 0.97 : 0.992, h) * smoothstep(layer == 0 ? 0.3 : 0.45, 0.0, length(fract(grid) - 0.5));
+        star *= 0.65 + 0.35 * sin(uTime * (1.0 + 3.0 * hash(cell + 3.0)) + h * 40.0);
+        sum += vec3(0.88, 0.92, 1.0) * star * (layer == 0 ? 0.8 : 1.3);
+      }
+      return sum * smoothstep(-0.12, -0.04, d.y);
+    }
+
+    // Spruce at the centre of one SPACING-wide cell: a narrow cone of drooping tiers. Coverage 0..1 at (x, y).
+    float spruce(float cell, float x, float y, float px) {
+      float h = 2.5 + 3.5 * hash(vec2(cell, 1.3)); // kept low: the plaza camera looks down, the aurora must clear them
+      if (y > h) return 0.0;
+      float cx = (cell + 0.25 + 0.5 * hash(vec2(cell, 4.1))) * SPACING;
+      float up = y / h;
+      float halfWidth = (1.0 - up) * (0.45 + 0.3 * hash(vec2(cell, 7.7))) + 0.03;
+      if (uDetail > 0.5) { // tiers: each branch whorl flares out and droops
+        float tier = fract(y * (3.2 + 0.8 * hash(vec2(cell, 2.2))));
+        halfWidth *= 0.7 + 0.45 * tier;
+        halfWidth += 0.06 * (noise(vec2(cell * 5.0, y * 12.0)) - 0.5);
+      }
+      return smoothstep(halfWidth + px, halfWidth - px, abs(x - cx));
+    }
+
+    void main() {
+      float az = azimuth(vPos);
+
+      if (uMode < 0.5) { // night sky with stars and aurora
+        vec3 d = normalize(vPos);
+        float el = d.y;
+        vec3 col = mix(vec3(0.025, 0.04, 0.07), vec3(0.04, 0.012, 0.06), smoothstep(0.0, 0.8, el));
+        // Stars down to the treeline (the plaza camera mostly sees the sky just under eye level).
+        if (uDetail > 0.5) col += stars(d, az);
+        col += aurora(d, uTime);
+        col += mix(GREEN, PINK, 0.25) * 0.10 * exp(-abs(el + 0.05) * 8.0); // the glow along the horizon behind the trees
+        gl_FragColor = vec4(col, 1.0);
+        return;
+      }
+
+      float circumference = TAU * uWallRadius;
+      float x = az * circumference;
+
+      if (uMode > 1.5) { // icy snow: the aurora mirrored across the floor, softly rippled, plus a green wash by the trees
+        vec2 q = vPos.xz;
+        vec3 n = vec3(0.0, 1.0, 0.0);
+        if (uDetail > 0.5) { // frost and drifts break the mirror up a little, and it shimmers
+          n.x += 0.03 * (noise(q * 0.9 + uTime * 0.05) - 0.5) + 0.008 * sin(q.y * 4.0 + uTime * 0.8);
+          n.z += 0.03 * (noise(q * 0.9 + 7.0 - uTime * 0.04) - 0.5) + 0.008 * sin(q.x * 3.7 - uTime * 0.6);
+        }
+        vec3 view = normalize(vPos - uCam);
+        vec3 mirror = reflect(view, normalize(n));
+        float fresnel = 0.3 + 0.7 * pow(1.0 - max(mirror.y, 0.0), 3.0); // a soft sheen close by, a mirror far out
+        vec3 reflection = aurora(mirror, uTime) * fresnel * 0.6;
+        if (uDetail > 0.5) reflection += stars(mirror, azimuth(mirror)) * fresnel * 0.5;
+        float r = length(q);
+        float near = smoothstep(uWallRadius * 0.3, uWallRadius, r);
+        vec3 wash = GREEN * 0.08 * near * (0.75 + 0.25 * sin(az * TAU * 3.0 + uTime * 0.2));
+        float edge = smoothstep(uWallRadius, uWallRadius * 0.92, r); // the trees' feet hide the very edge
+        gl_FragColor = vec4((reflection + wash) * edge, 1.0);
+        return;
+      }
+
+      // Wall: the forest. Each pixel checks its own tree and both neighbours (branches overlap); above them, sky.
+      float px = max(fwidth(x), 1e-3) * 1.5;
+      float cell = floor(x / SPACING);
+      float cover = 0.0;
+      for (int i = -1; i <= 1; i++) cover = max(cover, spruce(cell + float(i), x, vPos.y, px));
+      cover = max(cover, step(vPos.y, 0.8 + 0.8 * noise(vec2(x * 0.6, 0.0)))); // undergrowth along the foot
+      if (cover < 0.5) discard; // the wall is opaque: a hard cut at the silhouette edge
+      vec3 bark = vec3(0.004, 0.010, 0.010) + GREEN * 0.015 * smoothstep(0.0, uWallHeight, vPos.y); // a hint of rim light up top
+      gl_FragColor = vec4(bark, 1.0);
+    }`,
+};
+
 export const SKIES = {
   classic: { label: "classic", tinted: true },
   neon: {
@@ -537,6 +701,17 @@ export const SKIES = {
     credit: {
       html: 'Photo by <a href="https://unsplash.com/@cristianpalmer?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Cristian Palmer</a> on ' +
         '<a href="https://unsplash.com/photos/clear-blue-body-of-water-XexawgzYOBc?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>',
+    },
+  },
+  aurora: {
+    label: "aurora",
+    tinted: false,
+    shader: AURORA_SHADER,
+    ringInner: 0, // the reflection covers the whole floor
+    look: { sky: 0x08141a, floor: 0x1a2a33, light: 0x8fffd0, ground: 0x0c1822, sun: 0xbfe8ff, sunIntensity: 0.75, hemiIntensity: 1.1 },
+    credit: {
+      html: 'Photo by <a href="https://unsplash.com/@vingtcent?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Vincent Guth</a> on ' +
+        '<a href="https://unsplash.com/photos/silhouette-of-trees-near-aurora-borealis-at-night-62V7ntlKgL8?utm_source=unsplash&utm_medium=referral&utm_content=creditCopyText">Unsplash</a>',
     },
   },
   alley: {
