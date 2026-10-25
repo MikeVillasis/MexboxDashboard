@@ -54,7 +54,8 @@
         <!-- Carbon glass stats panel with an amber edge -->
         <Border Grid.Row="1" Grid.Column="1" Margin="44,0,0,0" VerticalAlignment="Top" MaxWidth="520"
                 CornerRadius="14" Padding="26,12,26,24" BorderBrush="{StaticResource SystemAmberBrush}" BorderThickness="0,3,0,0"
-                TextElement.Foreground="#FFEFEFEF">
+                TextElement.Foreground="#FFEFEFEF"
+                Visibility="{Binding IsLinkPanelOpen, Converter={StaticResource BoolToVisInverted}}">
             <Border.Background>
                 <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
                     <GradientStop Color="#F0343438" Offset="0" />
@@ -73,6 +74,30 @@
                 <TextBlock Text="data folder" Style="{StaticResource StatLabel}" />
                 <TextBlock Text="{Binding DataFolder}" FontSize="14" TextWrapping="Wrap" />
                 <TextBlock Text="{Binding VersionText}" FontSize="13" Opacity="0.5" Margin="0,18,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Link to discord: code entry (covers the stats while open) -->
+        <Border Grid.Row="1" Grid.Column="1" Margin="44,0,0,0" VerticalAlignment="Top" MaxWidth="520"
+                CornerRadius="14" Padding="26,18,26,24" BorderBrush="{StaticResource SystemAmberBrush}" BorderThickness="0,3,0,0"
+                TextElement.Foreground="#FFEFEFEF"
+                Visibility="{Binding IsLinkPanelOpen, Converter={StaticResource BoolToVis}}">
+            <Border.Background>
+                <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                    <GradientStop Color="#FA343438" Offset="0" />
+                    <GradientStop Color="#FA1A1A1C" Offset="1" />
+                </LinearGradientBrush>
+            </Border.Background>
+            <StackPanel>
+                <TextBlock Text="link to discord" FontSize="24" />
+                <TextBlock Text="{Binding LinkStatus}" FontSize="14" Opacity="0.75" TextWrapping="Wrap" Margin="0,6,0,14" />
+                <TextBox x:Name="LinkCodeBox" MaxLength="6" CharacterCasing="Upper" FontFamily="Consolas" FontSize="34"
+                         Padding="10,4" Width="200" HorizontalAlignment="Left" Foreground="White" CaretBrush="White"
+                         Background="#40000000" BorderBrush="#99FFFFFF" KeyDown="OnLinkCodeKeyDown" />
+                <StackPanel Orientation="Horizontal" Margin="0,18,0,0">
+                    <Button Content="link" Style="{StaticResource PillButton}" Click="OnLinkSubmit" />
+                    <Button Content="cancel" Style="{StaticResource PillButton}" Margin="12,0,0,0" Click="OnLinkCancel" />
+                </StackPanel>
             </StackPanel>
         </Border>
     </Grid>

@@ -19,6 +19,9 @@ public static class AppPaths
 
     public static string FriendsPath => Path.Combine(DataRoot, "friends.json");
 
+    /// <summary>The Discord Activity link (ticket 06); the device token inside is DPAPI-encrypted for the current user.</summary>
+    public static string ActivityDevicePath => Path.Combine(DataRoot, "activity-device.json");
+
     /// <summary>"localProfile.json" → "localProfile-{profile}.json" for side-by-side test profiles (--profile=name).</summary>
     public static string ForProfile(string path, string? profile) =>
         string.IsNullOrEmpty(profile) ? path : Path.Combine(Path.GetDirectoryName(path)!, $"{Path.GetFileNameWithoutExtension(path)}-{profile}{Path.GetExtension(path)}");

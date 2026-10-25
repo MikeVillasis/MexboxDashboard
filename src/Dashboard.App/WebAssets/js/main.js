@@ -6,7 +6,7 @@ import { NetworkManager } from "./net/NetworkManager.js";
 import { DEFAULT_SKY, SKIES } from "./scene/Sky.js";
 
 const backend = Xbox.backend;
-const dashboard = new Dashboard(backend, { blades: Xbox.blades, inputHints: Xbox.inputHints, manualFriends: Xbox.manualFriends, cameraControls: Xbox.cameraControls });
+const dashboard = new Dashboard(backend, { blades: Xbox.blades, inputHints: Xbox.inputHints, manualFriends: Xbox.manualFriends, cameraControls: Xbox.cameraControls, pairing: Xbox.pairing });
 const report = (event, avatar, other) => Xbox.send("PLAZA_EVENT", { event, id: avatar?.id, with: other?.id ?? null });
 const plaza = new Plaza(document.getElementById("viewport-3d"), {
   // A floor click sends your avatar walking there (and tells your friends, so theirs walks too).
@@ -156,6 +156,8 @@ if (backend) {
     dashboard.renderSystemMenu();
     dashboard.setMedia(p.media);
     document.getElementById("system-version").textContent = `v${p.version}`;
+    dashboard.refreshDevices().catch((err) => console.warn("could not list linked pcs", err));
+    if (Xbox.host === "webview2") backend.GetActivityLinkJson().then((json) => dashboard.setActivityLink(JSON.parse(json)));
     loadLibrary();
     loadAvatar();
     loadFriends().then(() => startNetwork(p.connectTo));
@@ -163,6 +165,7 @@ if (backend) {
     if (p.plazaSelfTest) { selfTest = true; plaza.setRunning(true); setTimeout(plazaSelfTest, 8000); }
   });
   Xbox.on("LIBRARY_CHANGED", loadLibrary);
+  Xbox.on("ACTIVITY_LINK", (state) => dashboard.setActivityLink(state)); // Windows: linking to the Discord Activity
   // Back to the authored plaza framing (key R in the Activity).
   Xbox.on("RESET_VIEW", () => { dashboard.focusAvatar(null); plaza.resetView(); });
   // Hosts with a presence feed (the Discord Activity) report what members are playing / listening to: a thought

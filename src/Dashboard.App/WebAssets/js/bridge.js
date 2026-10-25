@@ -15,6 +15,7 @@
 //             inputHints: "keyboard" or "controller" (default) footer hints.
 //             manualFriends: false hides "add a friend" by code (everyone present is connected automatically).
 //             cameraControls: free camera on the plaza view (drag the ground, wheel/pinch zoom, RESET_VIEW).
+//             pairing: the host can link a Windows PC to the signed-in account (StartPairingJson etc., ticket 06).
 //             quality: plaza render tier, "high" (default) | "medium" | "low" | "auto" (see js/scene/Quality.js).
 //
 // BACKEND CONTRACT (method names match C# XboxHostBridge; a host may leave out what it can't do, callers use ?.):
@@ -23,6 +24,7 @@
 //   GetFriendCode GetFriendsJson RememberFriend(code, dnaJson) ForgetFriend(code)
 //   PlaySound(cue) ToggleSound ToggleFullscreen Exit LogCanvasClick(x, z) OpenExternal(url)?
 //   MediaPlayPause MediaNext MediaPrevious
+//   StartPairingJson GetDevicesJson UnlinkDevice(id)   (hosts with pairing only)
 (function () {
   "use strict";
 
@@ -66,6 +68,7 @@
     quality: (host && host.quality) || "high",
     manualFriends: !(host && host.manualFriends === false),
     cameraControls: Boolean(host && host.cameraControls),
+    pairing: Boolean(host && host.pairing),
 
     backend: host ? host.backend : null,
 

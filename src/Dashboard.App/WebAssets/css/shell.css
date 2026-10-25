@@ -145,6 +145,8 @@ button { font: inherit; color: inherit; }
 
 .friend-code { display: flex; align-items: baseline; gap: 14px; margin-bottom: 18px; }
 .friend-code span { font-size: 34px; letter-spacing: 0.18em; font-family: Consolas, monospace; user-select: text; }
+.device-unlink { margin-left: auto; padding: 2px 12px; font-size: 13px; }
+#pair-button { margin-bottom: 10px; }
 .add-friend { display: flex; gap: 10px; margin-bottom: 18px; }
 .add-friend input {
   width: 160px; padding: 8px 12px; border-radius: 10px;

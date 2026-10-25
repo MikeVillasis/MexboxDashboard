@@ -129,6 +129,11 @@ const backend = {
   MediaPlayPause: call(() => {}),
   MediaNext: call(() => {}),
   MediaPrevious: call(() => {}),
+
+  // Linking the Windows dashboard (ticket 06).
+  StartPairingJson: call(async (s) => JSON.stringify(await api(s, "/pair", { method: "POST" }))),
+  GetDevicesJson: call(async (s) => JSON.stringify(await api(s, "/devices"))),
+  UnlinkDevice: call(async (s, id) => { await api(s, `/devices/${encodeURIComponent(id)}`, { method: "DELETE" }); return true; }),
 };
 
 /**
@@ -199,6 +204,7 @@ window.XboxHostAdapter = {
   inputHints: "keyboard",
   manualFriends: false, // everyone in the Activity is in the room already; codes only identify people
   cameraControls: true,  // drag the plaza ground to move, wheel/pinch to zoom, R to reset
+  pairing: true,         // "link my pc": the Windows dashboard redeems the code (ticket 06)
   // Discord passes ?platform=mobile|desktop in the Activity URL: phones start on the light tier, desktops adapt.
   quality: new URLSearchParams(location.search).get("platform") === "mobile" ? "low" : "auto",
   /** Called by main.js after HOST_READY (so sign-in is done): the shared room for this Activity instance. */

@@ -114,6 +114,15 @@
               </button>
               <ul id="sky-list" class="dropdown-list" role="listbox" hidden></ul>
             </div>
+
+            <!-- Hosts with pairing (Discord): link the Windows dashboard to this account. -->
+            <div id="pairing" hidden>
+              <h3>your pc</h3>
+              <ul id="device-list" class="plain-list"></ul>
+              <button id="pair-button" class="pill small interactive">link my pc</button>
+              <div id="pair-code" class="friend-code" hidden><span id="pair-code-value"></span><em id="pair-code-expiry" class="subtitle"></em></div>
+              <p class="subtitle">in the windows dashboard: system → link to discord, then type the code.</p>
+            </div>
           </div>
         </div>
       </section>

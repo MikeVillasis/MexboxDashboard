@@ -34,6 +34,7 @@ export class Dashboard extends EventTarget {
   /// options.inputHints: "controller" (default) or "keyboard" footer.
   /// options.manualFriends: false hides "add a friend" (hosts where everyone present is connected automatically).
   /// options.cameraControls: the plaza has a free camera; its hints show on the friends blade.
+  /// options.pairing: the host can link a Windows PC (ticket 06); shows "your pc" in the friends panel.
   constructor(backend, options = {}) {
     super();
     this.backend = backend;
@@ -57,6 +58,8 @@ export class Dashboard extends EventTarget {
     const input = options.inputHints === "keyboard" ? "keyboard" : "controller";
     for (const footer of document.querySelectorAll(".hints[data-input]")) footer.hidden = footer.dataset.input !== input;
     if (options.manualFriends === false) for (const el of document.querySelectorAll("[data-manual-friends]")) el.hidden = true;
+    this.pairing = Boolean(options.pairing);
+    $("pairing").hidden = !this.pairing;
 
     this.buildHeader();
     this.buildSystemMenu();
@@ -64,6 +67,48 @@ export class Dashboard extends EventTarget {
     this.layout(false);
     new ResizeObserver(() => this.layout(false)).observe($("blade-stack"));
     this.tickClock();
+  }
+
+  // ───────────── Linking a Windows PC (hosts with pairing) ─────────────
+
+  async refreshDevices() {
+    if (!this.pairing) return [];
+    const { devices } = JSON.parse(await this.backend.GetDevicesJson());
+    $("device-list").replaceChildren(...(devices.length ? devices.map((d) => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span></span><button class="pill small device-unlink interactive">unlink</button>`;
+      li.querySelector("span").textContent = d.name;
+      li.querySelector("button").addEventListener("click", async () => {
+        await this.backend.UnlinkDevice(d.id);
+        this.toast(`${d.name} unlinked`);
+        this.refreshDevices();
+      });
+      return li;
+    }) : [Object.assign(document.createElement("li"), { className: "subtitle", textContent: "no pc linked" })]));
+    return devices;
+  }
+
+  /// Shows a fresh code with a countdown, and watches for the PC to redeem it.
+  async startPairing() {
+    const before = (await this.refreshDevices()).length;
+    const { code, expiresAt } = JSON.parse(await this.backend.StartPairingJson());
+    $("pair-code-value").textContent = code;
+    $("pair-code").hidden = false;
+    clearInterval(this.pairTimer);
+    let polls = 0;
+    const tick = async () => {
+      const left = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+      $("pair-code-expiry").textContent = left ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "expired";
+      if (!left) { clearInterval(this.pairTimer); $("pair-code").hidden = true; return; }
+      if (++polls % 5 === 0 && (await this.refreshDevices()).length > before) { // linked: the code is used up
+        clearInterval(this.pairTimer);
+        $("pair-code").hidden = true;
+        this.toast("your pc is linked");
+        this.sound("Select");
+      }
+    };
+    tick();
+    this.pairTimer = setInterval(tick, 1000);
   }
 
   // ───────────── Commands from C# ─────────────
@@ -297,8 +342,31 @@ export class Dashboard extends EventTarget {
       { title: () => `sound effects: ${this.soundEnabled ? "on" : "off"}`, description: "blade swooshes and navigation blips",
         run: async () => { this.soundEnabled = await this.backend.ToggleSound(); this.renderSystemMenu(); } },
       { title: "gamercard", description: "your profile summary (G)", run: () => this.openGamercard() },
+      ...(Xbox.host === "webview2" ? [this.activityLinkItem()] : []), // the Windows app links itself to the Discord Activity
       { title: "exit dashboard", description: "close the launcher", run: () => this.backend.Exit() },
     ];
+    this.renderSystemMenu();
+  }
+
+  /// "link to discord" (ticket 06). Linking runs in C#; the outcome comes back as an ACTIVITY_LINK message.
+  activityLinkItem() {
+    return {
+      title: () => (this.activityLink?.linked ? `discord: linked as ${this.activityLink.displayName}` : "link to discord"),
+      description: () => (this.activityLink?.linked ? `this pc (${this.activityLink.name}) is linked · select to unlink` : "show your games in the discord activity"),
+      run: () => {
+        if (this.activityLink?.linked) {
+          if (confirm("unlink this pc from the discord activity?")) this.backend.UnlinkActivity();
+          return;
+        }
+        const code = prompt("in discord, open the activity → friends → link my pc, then type the code here:");
+        if (code && code.trim()) { this.backend.LinkActivity(code.trim()); this.toast("linking…"); }
+      },
+    };
+  }
+
+  setActivityLink(state) {
+    this.activityLink = state;
+    if (state?.message) this.toast(state.message);
     this.renderSystemMenu();
   }
 
@@ -310,7 +378,7 @@ export class Dashboard extends EventTarget {
       const title = typeof item.title === "function" ? item.title() : item.title;
       li.innerHTML = `<div class="text"><div class="title"></div><div class="meta"></div></div>`;
       li.querySelector(".title").textContent = title;
-      li.querySelector(".meta").textContent = item.description;
+      li.querySelector(".meta").textContent = typeof item.description === "function" ? item.description() : item.description;
       return li;
     }));
   }
@@ -555,6 +623,8 @@ export class Dashboard extends EventTarget {
 
     $("collapse-ui").addEventListener("click", () => this.setCollapsed(true));
     $("expand-ui").addEventListener("click", () => this.setCollapsed(false));
+
+    $("pair-button").addEventListener("click", () => { this.sound("Select"); this.startPairing().catch((err) => this.toast(String(err.message ?? err))); });
 
     $("add-friend").addEventListener("submit", (e) => {
       e.preventDefault();

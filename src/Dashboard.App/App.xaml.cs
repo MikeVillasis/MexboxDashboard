@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Dashboard.App.Audio;
+using Dashboard.App.Services;
 using Dashboard.Core.Abstractions;
 using Dashboard.Core.Data;
 using Dashboard.Core.Infrastructure;
@@ -62,10 +63,16 @@ public partial class App : Application
 
         await settingsLoad;
 
+        // Discord Activity link (ticket 06): opt-in. With no saved link this reads one missing file and never touches the
+        // network. --activity-server=<url> points it at another Worker (local dev: http://localhost:8787).
+        var activity = new ActivityBridgeService(
+            AppPaths.ForProfile(AppPaths.ActivityDevicePath, ArgValue(e.Args, "--profile=")), ActivityServer(e.Args));
+        _ = activity.LoadAsync();
+
         // Hybrid WebView2 shell (in development): same services, HTML/WebGL front end.
         if (e.Args.Contains("--web", StringComparer.OrdinalIgnoreCase))
         {
-            var web = new Web.WebShellWindow(library, _media, sounds, _settings)
+            var web = new Web.WebShellWindow(library, _media, sounds, _settings, activity)
             {
                 // --blade=avatar opens on a given blade (handy for testing and desktop shortcuts).
                 Profile = ArgValue(e.Args, "--profile="),
@@ -79,10 +86,19 @@ public partial class App : Application
             return;
         }
 
-        var window = new MainWindow(library, _media, sounds, covers, _settings);
+        var window = new MainWindow(library, _media, sounds, covers, _settings, activity);
         MainWindow = window;
         window.Show();
         _ = window.InitializeAsync();
+    }
+
+    /// <summary>--activity-server=https://… (or http://localhost:… for local dev); anything else is ignored.</summary>
+    private static string? ActivityServer(string[] args)
+    {
+        var value = args.FirstOrDefault(a => a.StartsWith("--activity-server=", StringComparison.OrdinalIgnoreCase))?[18..];
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)) return null;
+        var ok = uri.Scheme == Uri.UriSchemeHttps || (uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback);
+        return ok ? uri.GetLeftPart(UriPartial.Authority) : null;
     }
 
     private static string? ArgValue(string[] args, string prefix) =>

@@ -11,6 +11,7 @@ using Dashboard.App.Audio;
 using Dashboard.App.Controls;
 using Dashboard.App.Imaging;
 using Dashboard.App.Input;
+using Dashboard.App.Services;
 using Dashboard.App.ViewModels;
 using Dashboard.Core.Abstractions;
 using Dashboard.Core.Infrastructure;
@@ -48,7 +49,7 @@ public partial class MainWindow : Window
     private bool _isFullscreen = true;
     private DateTime _lastScanUtc = DateTime.MinValue;
 
-    public MainWindow(GameLibraryService library, IMediaService media, SoundService sounds, ICoverArtService covers, SettingsStore settings)
+    public MainWindow(GameLibraryService library, IMediaService media, SoundService sounds, ICoverArtService covers, SettingsStore settings, ActivityBridgeService activity)
     {
         InitializeComponent();
 
@@ -65,7 +66,8 @@ public partial class MainWindow : Window
         _systemVm = new SystemBladeViewModel(
             library,
             new ShellActions(RescanAsync, ToggleFullscreen, ToggleSound, OpenDataFolder, Close),
-            sounds.Enabled);
+            sounds.Enabled,
+            activity);
 
         GamesView.DataContext = _gamesVm;
         _gamesVm.PropertyChanged += (_, args) =>
@@ -210,6 +212,9 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+
+        // Typing in a text box (the discord link code) is text, not navigation: E or Q mustn't switch blades.
+        if (Keyboard.FocusedElement is TextBox) return;
 
         var action = MapKey(e.Key, Keyboard.Modifiers);
         if (action is null) return;

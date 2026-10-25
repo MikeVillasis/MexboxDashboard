@@ -88,9 +88,12 @@ gateway.on("connection", (ws) => {
 execFileSync("node", [path.join(root, "activity", "build.mjs"), "--dev"], { stdio: "inherit" });
 const wrangler = ["--prefix", path.join(root, "server"), "wrangler"];
 const config = ["--config", path.join(root, "server", "wrangler.toml")];
-execFileSync("npx", [...wrangler, "d1", "migrations", "apply", "mexbox", "--local", ...config], { stdio: "inherit", cwd: root, input: "y\n" });
+// Windows: npx is npx.cmd, and Node only runs .cmd files through a shell (arguments here contain no spaces).
+const win = process.platform === "win32";
+const NPX = win ? "npx.cmd" : "npx";
+execFileSync(NPX, [...wrangler, "d1", "migrations", "apply", "mexbox", "--local", ...config], { stdio: "inherit", cwd: root, input: "y\n", shell: win });
 
-const dev = spawn("npx", [
+const dev = spawn(NPX, [
   ...wrangler, "dev", ...config, "--local", "--port", String(PORT),
   "--assets", path.join(root, "activity", "dist-dev"),
   "--var", `DISCORD_API:http://127.0.0.1:${FAKE_DISCORD_PORT}/api`,
@@ -99,7 +102,7 @@ const dev = spawn("npx", [
   "--var", "DISCORD_BOT_TOKEN:dev-bot",
   "--var", `DISCORD_GATEWAY:http://127.0.0.1:${FAKE_GATEWAY_PORT}/`,
   "--var", `EXTRA_ORIGINS:http://localhost:${PORT}`,
-], { stdio: "inherit", cwd: root });
+], { stdio: "inherit", cwd: root, shell: win });
 
 console.log(`\nfake discord on :${FAKE_DISCORD_PORT}; activity on http://localhost:${PORT}/?user=ana&guild=${GUILD}&instance=room1\n`);
 const stop = () => { dev.kill("SIGINT"); fakeDiscord.close(); gateway.close(); process.exit(0); };

@@ -4,6 +4,8 @@ export interface Env {
   ASSETS: Fetcher;
   /** Per-IP limiter for API calls that reach Discord (wrangler.toml [[ratelimits]]). */
   DISCORD_CALLS: RateLimit;
+  /** Per-IP limiter for redeeming pairing codes (phase 06): keeps code guessing hopeless. */
+  PAIRING: RateLimit;
   /** One PlazaRoom Durable Object per Activity instance. */
   ROOMS: DurableObjectNamespace<import("./room").PlazaRoom>;
   /** The single Discord Gateway connection for presences (thought bubbles). */

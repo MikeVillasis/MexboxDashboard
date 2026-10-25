@@ -1,6 +1,7 @@
 import { authenticate, clientIp } from "./auth";
 import { allowedGuilds, allowedOrigins, type Env } from "./env";
 import { HttpError, isSnowflake, json, readJson } from "./http";
+import { deleteDevice, getDevice, listDevices, redeemPairing, startPairing, unlinkDevice } from "./devices";
 import { exchangeCode } from "./oauth";
 import { getAvatar, getAvatarImage, getMembers, putAvatar } from "./plaza";
 
@@ -32,7 +33,7 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, {
         status: 204,
-        headers: { ...cors, "access-control-allow-methods": "GET, POST, PUT", "access-control-allow-headers": "authorization, content-type, x-guild-id", "access-control-max-age": "600" },
+        headers: { ...cors, "access-control-allow-methods": "GET, POST, PUT, DELETE", "access-control-allow-headers": "authorization, content-type, x-guild-id", "access-control-max-age": "600" },
       });
     }
 
@@ -82,6 +83,14 @@ async function route(pathname: string, request: Request, env: Env): Promise<Resp
     const room = env.ROOMS.get(env.ROOMS.idFromName(`${guildId}:${instanceId}`));
     return room.fetch(new Request(request.url, { headers }));
   }
+
+  // Desktop pairing (phase 06). The Windows app calls without an Origin header, which the origin check lets through.
+  if (pathname === "/api/pair" && request.method === "POST") return startPairing(request, env);
+  if (pathname === "/api/pair/redeem" && request.method === "POST") return redeemPairing(request, env);
+  if (pathname === "/api/device" && request.method === "GET") return getDevice(request, env);
+  if (pathname === "/api/device" && request.method === "DELETE") return deleteDevice(request, env);
+  if (pathname === "/api/devices" && request.method === "GET") return listDevices(request, env);
+  if (pathname.startsWith("/api/devices/") && request.method === "DELETE") return unlinkDevice(request, env, pathname.slice(13));
 
   if (pathname === "/api/health") return json({ ok: true });
 

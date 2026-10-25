@@ -2,6 +2,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Text.Json.Nodes;
 using Dashboard.App.Audio;
+using Dashboard.App.Services;
 using Dashboard.Core.Abstractions;
 using Dashboard.Core.Avatars;
 using Dashboard.Core.Infrastructure;
@@ -11,7 +12,7 @@ using Dashboard.Core.Settings;
 namespace Dashboard.App.Web;
 
 /// <summary>Window-level operations the bridge can trigger, supplied by <see cref="WebShellWindow"/>.</summary>
-public sealed record WebShellActions(Action ToggleFullscreen, Action Exit, Action<JsonObject> OpenGamercard);
+public sealed record WebShellActions(Action ToggleFullscreen, Action Exit, Action<JsonObject> OpenGamercard, Action<JsonObject> ActivityLinkResult);
 
 /// <summary>
 /// Backend surface exposed to the page as <c>window.chrome.webview.hostObjects.xboxBackend</c>.
@@ -34,10 +35,12 @@ public sealed class XboxHostBridge
     private readonly WebShellActions _shell;
     private readonly AvatarProfileStore _avatar;
     private readonly FriendStore _friends;
+    private readonly ActivityBridgeService _activity;
     private readonly string _coversDir = AppPaths.CoversDir.TrimEnd('\\');
 
-    public XboxHostBridge(GameLibraryService library, SoundService sounds, SettingsStore settings, IMediaService media, WebShellActions shell, AvatarProfileStore avatar, FriendStore friends)
+    public XboxHostBridge(GameLibraryService library, SoundService sounds, SettingsStore settings, IMediaService media, WebShellActions shell, AvatarProfileStore avatar, FriendStore friends, ActivityBridgeService activity)
     {
+        _activity = activity;
         _avatar = avatar;
         _friends = friends;
         _library = library;
@@ -170,6 +173,34 @@ public sealed class XboxHostBridge
     }
 
     public bool ForgetFriend(string code) => _friends.Forget(code);
+
+    // ───────────── Discord Activity link (ticket 06) ─────────────
+
+    /// <summary>{ linked, displayName, name }: whether this PC is linked to the Activity, and as whom.</summary>
+    public string GetActivityLinkJson() => ActivityLinkJson(_activity.Link).ToJsonString();
+
+    /// <summary>Redeems a code from the Activity. Returns at once; the outcome arrives as an ACTIVITY_LINK message.</summary>
+    public void LinkActivity(string code)
+    {
+        _ = Task.Run(async () =>
+        {
+            var result = await _activity.LinkAsync(code);
+            var json = ActivityLinkJson(_activity.Link);
+            json["success"] = result.Success;
+            json["message"] = result.Message;
+            _shell.ActivityLinkResult(json);
+        });
+    }
+
+    /// <summary>Unlinks this PC; the new state arrives as an ACTIVITY_LINK message.</summary>
+    public void UnlinkActivity() => _ = Task.Run(_activity.UnlinkAsync);
+
+    public static JsonObject ActivityLinkJson(ActivityLink? link) => new()
+    {
+        ["linked"] = link is not null,
+        ["displayName"] = link?.DisplayName,
+        ["name"] = link?.Name,
+    };
 
     public string GetSettingsJson()
     {

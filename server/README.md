@@ -31,6 +31,13 @@ Avatars show what members are playing / listening to / watching, from their Disc
 Without the token the hub never connects and nobody gets bubbles; everything else works. Members who turned off
 "Share my activity" in Discord never get a bubble. Statuses live in memory only (never in D1).
 
+## Linking the Windows app (pairing)
+Members link their Windows dashboard from the Activity: **friends → your pc → link my pc** shows a 6-character code
+(10 minutes, single use); in the Windows app, **system → link to discord** and type it. The app keeps a device token
+(DPAPI-encrypted, `%AppData%\Xbox360Launcher\activity-device.json`); the server stores only its SHA-256. Unlink from
+either side. Redeeming is rate-limited per IP by the `PAIRING` binding in `wrangler.toml` (created on deploy). Local:
+`node tools/activity-dev/dev.mjs`, then start the app with `--activity-server=http://localhost:8787`.
+
 ## Develop
 - `npm test`: runs inside the Workers runtime against a local D1; Discord is mocked.
 - `npm run dev`: local Worker + front end at http://localhost:8787 (outside Discord it shows the "open from discord"

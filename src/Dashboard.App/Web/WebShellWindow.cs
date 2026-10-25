@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Media;
 using Dashboard.App.Audio;
 using Dashboard.App.Input;
+using Dashboard.App.Services;
 using Dashboard.Core.Abstractions;
 using Dashboard.Core.Avatars;
 using Dashboard.Core.Infrastructure;
@@ -31,6 +32,7 @@ public sealed class WebShellWindow : Window
     private readonly SoundService _sounds;
     private readonly SettingsStore _settings;
     private readonly IMediaService _media;
+    private readonly ActivityBridgeService _activity;
     private AvatarProfileStore _avatar = null!;
     private FriendStore _friends = null!;
     private readonly WebView2 _webView = new();
@@ -54,8 +56,9 @@ public sealed class WebShellWindow : Window
     /// <summary>--connect=CODE: connect to a friend as soon as the page is up.</summary>
     public string? ConnectTo { get; init; }
 
-    public WebShellWindow(GameLibraryService library, IMediaService media, SoundService sounds, SettingsStore settings)
+    public WebShellWindow(GameLibraryService library, IMediaService media, SoundService sounds, SettingsStore settings, ActivityBridgeService activity)
     {
+        _activity = activity;
         _library = library;
         _sounds = sounds;
         _settings = settings;
@@ -148,9 +151,12 @@ public sealed class WebShellWindow : Window
             core.NewWindowRequested += (_, e) => e.Handled = true;
 
             var actions = new WebShellActions(ToggleFullscreen, Close,
-                card => _messages.Post("OPEN_GAMERCARD", new JsonObject { ["card"] = card, ["source"] = "plaza" }));
+                card => _messages.Post("OPEN_GAMERCARD", new JsonObject { ["card"] = card, ["source"] = "plaza" }),
+                result => _messages.Post("ACTIVITY_LINK", result));
+            // Link state changes from elsewhere (startup check, unlink from the Activity side) reach the page too.
+            _activity.Changed += (_, _) => _messages.Post("ACTIVITY_LINK", XboxHostBridge.ActivityLinkJson(_activity.Link));
             await avatarLoad;
-            core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions, _avatar, _friends));
+            core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions, _avatar, _friends, _activity));
             _messages.Attach(core);
             RegisterHandlers();
 
