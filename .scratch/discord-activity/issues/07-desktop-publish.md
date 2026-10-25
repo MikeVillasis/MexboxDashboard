@@ -1,5 +1,5 @@
 # 07 Publish library and now playing
-Status: in-progress (deployed 2026-10-25, version 3c1629ed; not yet tested in Discord)
+Status: done (exercised in Discord 2026-10-25 via ticket 08: the owner's gamercard listed their games and launched one)
 Blocked by: 06
 
 - Outbound WSS from the app to a Device DO; push library summary (id, title, platform, cover url) and now playing.

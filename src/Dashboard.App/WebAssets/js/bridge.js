@@ -24,7 +24,7 @@
 //   GetFriendCode GetFriendsJson RememberFriend(code, dnaJson) ForgetFriend(code)
 //   PlaySound(cue) ToggleSound ToggleFullscreen Exit LogCanvasClick(x, z) OpenExternal(url)?
 //   MediaPlayPause MediaNext MediaPrevious
-//   StartPairingJson GetDevicesJson UnlinkDevice(id)   (hosts with pairing only)
+//   StartPairingJson GetDevicesJson UnlinkDevice(id) LaunchOnPc(gameId)   (hosts with pairing only)
 (function () {
   "use strict";
 

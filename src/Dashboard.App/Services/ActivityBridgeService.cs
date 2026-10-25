@@ -9,6 +9,7 @@ using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Dashboard.Core.Abstractions;
 using Dashboard.Core.Infrastructure;
+using Dashboard.Core.Models;
 using Dashboard.Core.Services;
 
 namespace Dashboard.App.Services;
@@ -53,12 +54,22 @@ public sealed class ActivityBridgeService
     public event EventHandler? Changed;
 
     /// <summary>
+    /// Phase 08: the owner started this game from their gamercard in Discord. Raised (worker thread) just before the
+    /// launch, so the shell can show its "starting … from discord" toast.
+    /// </summary>
+    public event Action<GameEntry>? RemoteLaunch;
+
+    /// <summary>
     /// Phase 07: while linked, publish this PC's library summary and "now playing" to the Activity. Call once at
     /// startup; the publisher follows the link (starts on link/load, stops on unlink).
     /// </summary>
     public void AttachSources(GameLibraryService library, IMediaService media)
     {
         _publisher = new ActivityPublisher(library, media, ForgetRevokedAsync);
+        _publisher.MessageReceived += message =>
+        {
+            if (message["type"]?.GetValue<string>() == "LAUNCH") _ = HandleLaunchAsync(library, message);
+        };
         Changed += (_, _) => SyncPublisher();
         SyncPublisher();
     }
@@ -75,6 +86,37 @@ public sealed class ActivityBridgeService
         }
         if (link is not null && token is not null) _publisher.Start(link.Server, token);
         else _publisher.Stop();
+    }
+
+    /// <summary>
+    /// A launch from the Activity. The server only relays the owner's requests for games this PC published; the PC still
+    /// re-checks the id against its own library, then launches through the store's URI / bootstrapper like pressing play.
+    /// </summary>
+    private async Task HandleLaunchAsync(GameLibraryService library, JsonNode message)
+    {
+        var requestId = message["requestId"]?.GetValue<string>();
+        var gameId = message["gameId"]?.GetValue<string>();
+        var game = library.GetSnapshot().FirstOrDefault(g => string.Equals(g.Id, gameId, StringComparison.OrdinalIgnoreCase));
+        if (requestId is null) return;
+        if (game is null)
+        {
+            Log.Warn($"Activity: launch request for unknown game '{gameId}' refused");
+            _publisher?.Send(new JsonObject { ["type"] = "LAUNCH_RESULT", ["requestId"] = requestId, ["ok"] = false, ["reason"] = "not installed" });
+            return;
+        }
+
+        Log.Info($"Activity: launching {game.Id} at the owner's request from discord");
+        RemoteLaunch?.Invoke(game);
+        try
+        {
+            await library.LaunchAsync(game).ConfigureAwait(false);
+            _publisher?.Send(new JsonObject { ["type"] = "LAUNCH_RESULT", ["requestId"] = requestId, ["ok"] = true });
+        }
+        catch (Exception ex)
+        {
+            Log.Error($"Activity: remote launch of {game.Id} failed", ex);
+            _publisher?.Send(new JsonObject { ["type"] = "LAUNCH_RESULT", ["requestId"] = requestId, ["ok"] = false, ["reason"] = "couldn't start it" });
+        }
     }
 
     /// <summary>The server rejected the token (unlinked from the Activity): forget the link here too.</summary>

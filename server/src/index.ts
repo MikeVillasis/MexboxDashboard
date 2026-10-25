@@ -2,6 +2,7 @@ import { authenticate, clientIp } from "./auth";
 import { allowedGuilds, allowedOrigins, type Env } from "./env";
 import { HttpError, isSnowflake, json, readJson } from "./http";
 import { authenticateDevice, deleteDevice, getDevice, listDevices, redeemPairing, startPairing, unlinkDevice } from "./devices";
+import { launchGame } from "./launch";
 import { getGameCover, getLibrary } from "./library";
 import { exchangeCode } from "./oauth";
 import { getAvatar, getAvatarImage, getMembers, putAvatar } from "./plaza";
@@ -104,6 +105,7 @@ async function route(pathname: string, request: Request, env: Env): Promise<Resp
   }
   if (pathname.startsWith("/api/library/") && request.method === "GET") return getLibrary(request, env, pathname.slice(13));
   if (pathname === "/api/game-cover" && request.method === "GET") return getGameCover(request, env);
+  if (pathname === "/api/launch" && request.method === "POST") return launchGame(request, env);
 
   if (pathname === "/api/health") return json({ ok: true });
 

@@ -155,6 +155,11 @@ public sealed class WebShellWindow : Window
                 result => _messages.Post("ACTIVITY_LINK", result));
             // Link state changes from elsewhere (startup check, unlink from the Activity side) reach the page too.
             _activity.Changed += (_, _) => _messages.Post("ACTIVITY_LINK", XboxHostBridge.ActivityLinkJson(_activity.Link));
+            _activity.RemoteLaunch += game =>
+            {
+                _sounds.Play(SoundCue.ChannelChange);
+                _messages.Post("TOAST", new JsonObject { ["text"] = $"starting {game.Title} from discord…" });
+            };
             await avatarLoad;
             core.AddHostObjectToScript("xboxBackend", new XboxHostBridge(_library, _sounds, _settings, _media, actions, _avatar, _friends, _activity));
             _messages.Attach(core);

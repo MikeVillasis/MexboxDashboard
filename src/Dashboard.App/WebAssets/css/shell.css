@@ -561,6 +561,8 @@ kbd {
   background: #222 center / cover no-repeat; box-shadow: 0 0 0 1px rgba(255,255,255,.35);
   display: grid; place-items: center; text-align: center; font-size: 9px; padding: 3px; line-height: 1.1;
 }
+.gc-games li.launchable { cursor: pointer; transition: transform 0.12s, box-shadow 0.2s; }
+.gc-games li.launchable:hover { transform: translateY(-2px); box-shadow: 0 0 0 2px #fff, 0 0 14px rgba(255,255,255,.5); }
 .gc-games li.more { background: none; box-shadow: none; font-size: 13px; color: var(--muted); }
 
 .toast {

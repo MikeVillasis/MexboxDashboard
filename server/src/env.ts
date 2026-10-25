@@ -6,6 +6,8 @@ export interface Env {
   DISCORD_CALLS: RateLimit;
   /** Per-IP limiter for redeeming pairing codes (phase 06): keeps code guessing hopeless. */
   PAIRING: RateLimit;
+  /** Per-member limiter for remote launches (phase 08). */
+  LAUNCHES: RateLimit;
   /** One PlazaRoom Durable Object per Activity instance. */
   ROOMS: DurableObjectNamespace<import("./room").PlazaRoom>;
   /** The single Discord Gateway connection for presences (thought bubbles). */

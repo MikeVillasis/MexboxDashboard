@@ -36,8 +36,8 @@ function mockDiscord() {
   });
 }
 
-async function pairPc(): Promise<string> {
-  const { code } = (await (await activity("/api/pair", "POST")).json()) as { code: string };
+async function pairPc(token = "user-token"): Promise<string> {
+  const { code } = (await (await activity("/api/pair", "POST", token)).json()) as { code: string };
   const res = await call("/api/pair/redeem", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code, name: "pc" }) });
   return ((await res.json()) as { token: string }).token;
 }
@@ -174,5 +174,64 @@ describe("reading libraries", () => {
     expect(ok.headers.get("content-type")).toBe("image/jpeg");
     expect((await activity(`/api/game-cover?url=${encodeURIComponent("https://evil.example/x.jpg")}`)).status).toBe(400);
     expect((await activity(`/api/game-cover?url=${encodeURIComponent("http://cdn.cloudflare.steamstatic.com/x.jpg")}`)).status).toBe(400);
+  });
+});
+
+describe("remote launch", () => {
+  const launch = (gameId: string, token = "user-token") =>
+    call("/api/launch", { method: "POST", headers: { origin: ORIGIN, authorization: `Bearer ${token}`, "x-guild-id": GUILD, "content-type": "application/json" }, body: JSON.stringify({ gameId }) });
+
+  async function publishedPc(token = "user-token") {
+    const pc = await connect(await pairPc(token));
+    pc.send({ type: "LIBRARY", games: GAMES.slice(0, 2) });
+    await pc.next("OK");
+    return pc;
+  }
+
+  it("relays a launch of a published game to the owner's PC and reports its answer", async () => {
+    const pc = await publishedPc();
+    const pending = launch("Steam:1086940");
+    const request = await pc.next("LAUNCH");
+    expect(request.gameId).toBe("Steam:1086940");
+    pc.send({ type: "LAUNCH_RESULT", requestId: request.requestId, ok: true });
+    expect(await (await pending).json()).toEqual({ result: "launched", device: "pc" });
+  });
+
+  it("passes on the PC's refusal", async () => {
+    const pc = await publishedPc();
+    const pending = launch("Battle.net:fenris");
+    const request = await pc.next("LAUNCH");
+    pc.send({ type: "LAUNCH_RESULT", requestId: request.requestId, ok: false, reason: "not installed" });
+    expect(await (await pending).json()).toEqual({ result: "failed", reason: "not installed", device: "pc" });
+  });
+
+  it("refuses games that aren't in the published library", async () => {
+    await publishedPc();
+    const res = await launch("Steam:999999");
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "game_not_in_library" });
+  });
+
+  it("never reaches someone else's PC", async () => {
+    const pc = await publishedPc(); // Ana's
+    const res = await launch("Steam:1086940", "ben-token");
+    expect(res.status).toBe(404);
+    await settle();
+    await expect(pc.next("LAUNCH")).rejects.toThrow("no LAUNCH");
+  });
+
+  it("says when the PC is offline", async () => {
+    const pc = await publishedPc();
+    pc.ws.close(1000, "bye");
+    await settle();
+    expect(await (await launch("Steam:1086940")).json()).toEqual({ result: "offline", device: "pc" });
+  });
+
+  it("rejects malformed ids and rate-limits per member", async () => {
+    expect((await launch("bad <id>", "ben-token")).status).toBe(400);
+    await publishedPc("ben-token");
+    const statuses: number[] = [];
+    for (let i = 0; i < 8; i++) statuses.push((await launch("Steam:999999", "ben-token")).status);
+    expect(statuses).toContain(429);
   });
 });

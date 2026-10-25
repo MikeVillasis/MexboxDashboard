@@ -203,6 +203,13 @@ public sealed class GamesBladeViewModel : ObservableObject
         Games.Insert(lo, item);
     }
 
+    /// <summary>A launch started from the owner's gamercard in the Discord Activity (ticket 08).</summary>
+    public void ShowRemoteLaunch(string title)
+    {
+        _sounds.Play(SoundCue.ChannelChange);
+        ShowStatus($"starting {title} from discord…");
+    }
+
     private async void ShowStatus(string text)
     {
         var token = ++_statusToken;

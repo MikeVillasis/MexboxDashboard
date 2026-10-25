@@ -166,6 +166,7 @@ if (backend) {
   });
   Xbox.on("LIBRARY_CHANGED", loadLibrary);
   Xbox.on("ACTIVITY_LINK", (state) => dashboard.setActivityLink(state)); // Windows: linking to the Discord Activity
+  Xbox.on("TOAST", (p) => dashboard.toast(p.text)); // Windows: e.g. a game launched from Discord
   // Back to the authored plaza framing (key R in the Activity).
   Xbox.on("RESET_VIEW", () => { dashboard.focusAvatar(null); plaza.resetView(); });
   // Hosts with a presence feed (the Discord Activity) report what members are playing / listening to: a thought

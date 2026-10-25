@@ -43,6 +43,11 @@ While linked, the Windows app keeps a WebSocket to its own `DeviceHub` Durable O
 publishes a library summary (title, platform, public store cover URL) and what's playing. Any member of the server sees
 them on that member's gamercard. Covers load through `/api/game-cover`, which only fetches from Steam and Blizzard CDNs.
 
+## Starting games from Discord
+On your own gamercard, clicking a game asks your linked PC to start it (`POST /api/launch`). The server only relays
+your requests to your own PCs, only for games they published, rate-limited per member (`LAUNCHES`); the PC checks its own
+library again, shows a "starting … from discord" toast and launches through the store, like pressing play.
+
 ## Develop
 - `npm test`: runs inside the Workers runtime against a local D1; Discord is mocked.
 - `npm run dev`: local Worker + front end at http://localhost:8787 (outside Discord it shows the "open from discord"

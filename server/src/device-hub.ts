@@ -5,6 +5,10 @@
 //   LIBRARY { games: [{ id, title, platform, cover }] }   games_json (validated, ≤ 500 games)
 //   NOW_PLAYING { media: { title, artist, app, playing } | null }   now_playing (cleared when the PC disconnects)
 //   "ping"  →  "pong"  (answered by the runtime without waking the hub, so an idle link costs nothing)
+//   LAUNCH_RESULT { requestId, ok, reason? }       answer to a LAUNCH (phase 08)
+//
+// Hub → app (phase 08)
+//   LAUNCH { requestId, gameId }   sent when the owner asks from the Activity (the Worker checked owner + library)
 //
 // The Worker authenticates the device token (Authorization header) before the upgrade reaches the hub; the hub
 // trusts only the device id it was named for. Everything from the app is shape/size checked and rate limited, since a
@@ -17,6 +21,7 @@ const MAX_MESSAGE = 96 * 1024;   // a 500-game library is ~60 KB of JSON
 const MAX_GAMES = 500;
 const LIBRARY_EVERY_MS = 5_000;  // the app debounces; this stops a misbehaving one hammering D1
 const MEDIA_EVERY_MS = 500;
+const LAUNCH_ANSWER_MS = 6_000;  // how long the Activity waits for the PC to say "launching" / "not found"
 
 export const DEVICE_CLOSE = { replaced: 4002, protocol: 4004 } as const;
 
@@ -78,7 +83,33 @@ export function normaliseNowPlaying(raw: unknown): NowPlaying | null {
   return { title, artist: text(m.artist, 100), app: text(m.app, 40).toLowerCase(), playing: m.playing === true };
 }
 
+export type LaunchOutcome = { result: "launched" } | { result: "failed"; reason: string } | { result: "sent" } | { result: "offline" };
+
 export class DeviceHub extends DurableObject<Env> {
+  /** Launches waiting for the PC's LAUNCH_RESULT (in memory: the hub stays awake while a request is waiting). */
+  private pending = new Map<string, (outcome: LaunchOutcome) => void>();
+
+  /**
+   * Phase 08: relay a launch to the connected PC and wait briefly for its answer. The Worker has already checked that
+   * the caller owns this device and that the game is in its last published library.
+   */
+  async launch(gameId: string): Promise<LaunchOutcome> {
+    const ws = this.ctx.getWebSockets()[0];
+    if (!ws) return { result: "offline" };
+    const requestId = crypto.randomUUID();
+    const answer = new Promise<LaunchOutcome>((resolve) => {
+      this.pending.set(requestId, resolve);
+      setTimeout(() => { if (this.pending.delete(requestId)) resolve({ result: "sent" }); }, LAUNCH_ANSWER_MS);
+    });
+    try {
+      ws.send(JSON.stringify({ type: "LAUNCH", requestId, gameId }));
+    } catch {
+      this.pending.delete(requestId);
+      return { result: "offline" };
+    }
+    return answer;
+  }
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
@@ -121,6 +152,13 @@ export class DeviceHub extends DurableObject<Env> {
            ON CONFLICT (device_id) DO UPDATE SET games_json = excluded.games_json, updated_at = excluded.updated_at`,
         ).bind(link.deviceId, JSON.stringify(games), now).run();
         ws.send(JSON.stringify({ type: "OK", what: "LIBRARY", games: games.length }));
+        break;
+      }
+      case "LAUNCH_RESULT": {
+        const resolve = typeof packet.requestId === "string" ? this.pending.get(packet.requestId) : undefined;
+        if (!resolve) break;
+        this.pending.delete(packet.requestId as string);
+        resolve(packet.ok === true ? { result: "launched" } : { result: "failed", reason: text(packet.reason, 60) || "failed" });
         break;
       }
       case "NOW_PLAYING": {

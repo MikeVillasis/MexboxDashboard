@@ -68,6 +68,7 @@ public partial class MainWindow : Window
             new ShellActions(RescanAsync, ToggleFullscreen, ToggleSound, OpenDataFolder, Close),
             sounds.Enabled,
             activity);
+        activity.RemoteLaunch += game => Dispatcher.InvokeAsync(() => _gamesVm.ShowRemoteLaunch(game.Title));
 
         GamesView.DataContext = _gamesVm;
         _gamesVm.PropertyChanged += (_, args) =>

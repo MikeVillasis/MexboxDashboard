@@ -535,15 +535,38 @@ export class Dashboard extends EventTarget {
     // card.games: [{ title, platform, cover }] from a linked PC; card.gameCount: the full library size.
     const games = card?.games ?? [];
     $("gc-games").hidden = games.length === 0;
+    // card.launchable: your own card with a linked PC — a click starts the game there (ticket 08).
+    const launchable = Boolean(card?.launchable && this.backend?.LaunchOnPc);
+    $("gc-launch-hint").hidden = !(launchable && games.length);
     $("gc-games").replaceChildren(...games.map((g) => {
       const li = document.createElement("li");
-      li.title = `${g.title} (${g.platform})`;
+      li.title = launchable ? `start ${g.title} on your pc` : `${g.title} (${g.platform})`;
       if (g.cover) li.style.backgroundImage = `url("${g.cover}")`;
       else li.textContent = g.title;
+      if (launchable) {
+        li.classList.add("launchable", "interactive");
+        li.addEventListener("click", () => this.launchOnPc(g));
+      }
       return li;
     }), ...(card?.gameCount > games.length ? [Object.assign(document.createElement("li"), { className: "more", textContent: `+${card.gameCount - games.length}` })] : []));
     $("gamercard").hidden = false;
     this.sound("Select");
+  }
+
+  async launchOnPc(game) {
+    this.sound("Select");
+    this.toast(`asking your pc to start ${game.title}…`);
+    try {
+      const outcome = JSON.parse(await this.backend.LaunchOnPc(game.id));
+      this.toast({
+        launched: `starting ${game.title} on ${outcome.device ?? "your pc"}`,
+        sent: `sent to ${outcome.device ?? "your pc"}`,
+        offline: `${outcome.device ?? "your pc"} isn't connected. open the dashboard on it first`,
+        failed: `${outcome.device ?? "your pc"} couldn't start it (${outcome.reason ?? "unknown"})`,
+      }[outcome.result] ?? "something went wrong");
+    } catch (err) {
+      this.toast(String(err?.message ?? err));
+    }
   }
 
   closeGamercard() {

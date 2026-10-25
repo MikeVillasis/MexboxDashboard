@@ -1,6 +1,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Collections.Concurrent;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json.Nodes;
@@ -38,6 +39,7 @@ internal sealed class ActivityPublisher : IDisposable
     private Task? _loop;
     private int _libraryDirty;
     private int _mediaDirty;
+    private readonly ConcurrentQueue<JsonObject> _outbox = new();
 
     /// <summary>Raised (worker thread) when the hub answers, e.g. to log or, in phase 08, to deliver launch requests.</summary>
     public event Action<JsonNode>? MessageReceived;
@@ -77,6 +79,13 @@ internal sealed class ActivityPublisher : IDisposable
     }
 
     public void Dispose() => Stop();
+
+    /// <summary>Queues a packet for the hub (e.g. LAUNCH_RESULT); sent on the open connection, dropped if there's none.</summary>
+    public void Send(JsonObject packet)
+    {
+        _outbox.Enqueue(packet);
+        _wake.Release();
+    }
 
     private void MarkDirty(ref int flag)
     {
@@ -136,6 +145,7 @@ internal sealed class ActivityPublisher : IDisposable
 
         Interlocked.Exchange(ref _libraryDirty, 1);
         Interlocked.Exchange(ref _mediaDirty, 1);
+        _outbox.Clear(); // answers meant for an earlier connection are stale
         var lastLibrary = DateTime.MinValue;
         var nextPing = DateTime.UtcNow + PingEvery;
         DateTime? libraryDue = DateTime.UtcNow; // first library goes out right away
@@ -160,6 +170,8 @@ internal sealed class ActivityPublisher : IDisposable
                     await SendAsync(ws, new JsonObject { ["type"] = "NOW_PLAYING", ["media"] = NowPlaying() }, session.Token).ConfigureAwait(false);
                     mediaDue = null;
                 }
+                while (_outbox.TryDequeue(out var packet))
+                    await SendAsync(ws, packet, session.Token).ConfigureAwait(false);
                 if (now >= nextPing)
                 {
                     await ws.SendAsync(Encoding.UTF8.GetBytes("ping"), WebSocketMessageType.Text, true, session.Token).ConfigureAwait(false);

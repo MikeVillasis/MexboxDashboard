@@ -112,7 +112,8 @@ const backend = {
     const shown = library?.games.slice(0, CARD_GAMES) ?? [];
     emit("OPEN_GAMERCARD", { card: { gamertag: dna.name, color: dna.shirtColor, local,
       picture: code ? await pictureFor(s, code) : null,
-      games: await Promise.all(shown.map(async (g) => ({ title: g.title, platform: g.platform, cover: g.cover ? await coverFor(s, g.cover) : null }))),
+      games: await Promise.all(shown.map(async (g) => ({ id: g.id, title: g.title, platform: g.platform, cover: g.cover ? await coverFor(s, g.cover) : null }))),
+      launchable: local && Boolean(library?.devices), // your own card, with a linked PC: covers start games there (ticket 08)
       gameCount: library?.games.length ?? 0,
       stats: {
         ...(local ? { status: "in the plaza", "signed in as": s.member.displayName } : { status: "plaza resident", zone: "this server" }),
@@ -148,6 +149,8 @@ const backend = {
   StartPairingJson: call(async (s) => JSON.stringify(await api(s, "/pair", { method: "POST" }))),
   GetDevicesJson: call(async (s) => JSON.stringify(await api(s, "/devices"))),
   UnlinkDevice: call(async (s, id) => { await api(s, `/devices/${encodeURIComponent(id)}`, { method: "DELETE" }); return true; }),
+  // Start a game on your own linked PC (ticket 08). The Worker only relays your own games to your own PCs.
+  LaunchOnPc: call(async (s, gameId) => JSON.stringify(await api(s, "/launch", { method: "POST", body: { gameId } }))),
 };
 
 /**
