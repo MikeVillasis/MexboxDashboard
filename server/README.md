@@ -38,6 +38,11 @@ Members link their Windows dashboard from the Activity: **friends â†’ your pc â†
 either side. Redeeming is rate-limited per IP by the `PAIRING` binding in `wrangler.toml` (created on deploy). Local:
 `node tools/activity-dev/dev.mjs`, then start the app with `--activity-server=http://localhost:8787`.
 
+## Libraries on gamercards
+While linked, the Windows app keeps a WebSocket to its own `DeviceHub` Durable Object (`GET /api/device/ws`) and
+publishes a library summary (title, platform, public store cover URL) and what's playing. Any member of the server sees
+them on that member's gamercard. Covers load through `/api/game-cover`, which only fetches from Steam and Blizzard CDNs.
+
 ## Develop
 - `npm test`: runs inside the Workers runtime against a local D1; Discord is mocked.
 - `npm run dev`: local Worker + front end at http://localhost:8787 (outside Discord it shows the "open from discord"

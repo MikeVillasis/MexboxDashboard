@@ -1,10 +1,12 @@
 import { authenticate, clientIp } from "./auth";
 import { allowedGuilds, allowedOrigins, type Env } from "./env";
 import { HttpError, isSnowflake, json, readJson } from "./http";
-import { deleteDevice, getDevice, listDevices, redeemPairing, startPairing, unlinkDevice } from "./devices";
+import { authenticateDevice, deleteDevice, getDevice, listDevices, redeemPairing, startPairing, unlinkDevice } from "./devices";
+import { getGameCover, getLibrary } from "./library";
 import { exchangeCode } from "./oauth";
 import { getAvatar, getAvatarImage, getMembers, putAvatar } from "./plaza";
 
+export { DeviceHub } from "./device-hub";
 export { PresenceHub } from "./presence-hub";
 export { PlazaRoom } from "./room";
 
@@ -91,6 +93,17 @@ async function route(pathname: string, request: Request, env: Env): Promise<Resp
   if (pathname === "/api/device" && request.method === "DELETE") return deleteDevice(request, env);
   if (pathname === "/api/devices" && request.method === "GET") return listDevices(request, env);
   if (pathname.startsWith("/api/devices/") && request.method === "DELETE") return unlinkDevice(request, env, pathname.slice(13));
+
+  // Linked PCs publish their library and now playing over a WebSocket to their own DeviceHub (phase 07). Unlike the
+  // browser room, the Windows app can send the device token in the Authorization header, so it's checked here.
+  if (pathname === "/api/device/ws" && request.method === "GET") {
+    if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") throw new HttpError(426, "websocket_required");
+    const device = await authenticateDevice(request, env);
+    const hub = env.DEVICES.get(env.DEVICES.idFromName(device.id));
+    return hub.fetch(new Request(request.url, { headers: { upgrade: "websocket", "x-device-id": device.id } }));
+  }
+  if (pathname.startsWith("/api/library/") && request.method === "GET") return getLibrary(request, env, pathname.slice(13));
+  if (pathname === "/api/game-cover" && request.method === "GET") return getGameCover(request, env);
 
   if (pathname === "/api/health") return json({ ok: true });
 

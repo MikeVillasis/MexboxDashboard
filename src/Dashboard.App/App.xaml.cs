@@ -67,6 +67,7 @@ public partial class App : Application
         // network. --activity-server=<url> points it at another Worker (local dev: http://localhost:8787).
         var activity = new ActivityBridgeService(
             AppPaths.ForProfile(AppPaths.ActivityDevicePath, ArgValue(e.Args, "--profile=")), ActivityServer(e.Args));
+        activity.AttachSources(library, _media); // ticket 07: publishes library + now playing only while linked
         _ = activity.LoadAsync();
 
         // Hybrid WebView2 shell (in development): same services, HTML/WebGL front end.

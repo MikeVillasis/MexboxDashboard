@@ -74,9 +74,13 @@ const backend = {
   GetVersion: call(() => "activity"),
   GetLibraryJson: call(() => "[]"),
   GetSettingsJson: call(() => JSON.stringify({ soundEnabled: sound.enabled, lastGameId: null })),
-  GetProfileJson: call(async (s) => JSON.stringify({
-    gamertag: s.dna.name, games: 0, launches: 0, lastPlayed: null, picture: await pictureFor(s, friendCode(s.member.discordId)),
-  })),
+  GetProfileJson: call(async (s) => {
+    const library = await libraryFor(s, friendCode(s.member.discordId));
+    return JSON.stringify({
+      gamertag: s.dna.name, games: library?.games.length ?? 0, launches: 0, lastPlayed: null,
+      picture: await pictureFor(s, friendCode(s.member.discordId)),
+    });
+  }),
   FocusGame: call(() => {}),
   LaunchGame: call(() => false),
   Rescan: call(() => {}),
@@ -99,11 +103,21 @@ const backend = {
     const local = dna.id === "local";
     // Members have a friend code (yours, or friend_CODE); the plaza's resident NPCs don't, so they keep the silhouette.
     const code = local ? friendCode(s.member.discordId) : /^friend_([A-Z0-9]{6})$/.exec(dna.id ?? "")?.[1];
+    // A linked Windows PC (ticket 07) adds the member's games and what's playing on it.
+    const library = code ? await libraryFor(s, code) : null;
+    const pc = library?.devices ? {
+      games: library.games.length,
+      ...(library.nowPlaying ? { "on their pc": `${library.nowPlaying.playing ? "▶" : "❚❚"} ${[library.nowPlaying.title, library.nowPlaying.artist].filter(Boolean).join(" – ")}` } : {}),
+    } : {};
+    const shown = library?.games.slice(0, CARD_GAMES) ?? [];
     emit("OPEN_GAMERCARD", { card: { gamertag: dna.name, color: dna.shirtColor, local,
       picture: code ? await pictureFor(s, code) : null,
+      games: await Promise.all(shown.map(async (g) => ({ title: g.title, platform: g.platform, cover: g.cover ? await coverFor(s, g.cover) : null }))),
+      gameCount: library?.games.length ?? 0,
       stats: {
         ...(local ? { status: "in the plaza", "signed in as": s.member.displayName } : { status: "plaza resident", zone: "this server" }),
         ...cardStatus(code),
+        ...pc,
       } } });
     return true;
   }),
@@ -141,6 +155,24 @@ const backend = {
  * only serves members of your server) and kept for the session; null if it can't be loaded.
  */
 const pictures = new Map(); // code → Promise<string | null>
+const CARD_GAMES = 6;
+const covers = new Map(); // store CDN url → blob URL (fetched through the Worker: the Activity sandbox blocks other hosts)
+
+/** A member's published library ({ games, nowPlaying, devices }); null when it can't be read. Fresh on every card. */
+async function libraryFor(s, code) {
+  try { return await api(s, `/library/${code}`); } catch { return null; }
+}
+
+function coverFor(s, url) {
+  if (!covers.has(url)) {
+    covers.set(url, fetch(`${API}/game-cover?url=${encodeURIComponent(url)}`, { headers: { authorization: `Bearer ${s.token}`, "x-guild-id": s.sdk.guildId ?? "" } })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((blob) => (blob ? URL.createObjectURL(blob) : null))
+      .catch(() => null));
+  }
+  return covers.get(url);
+}
+
 function pictureFor(s, code) {
   if (!pictures.has(code)) {
     pictures.set(code, fetch(`${API}/avatar-image/${code}`, { headers: { authorization: `Bearer ${s.token}`, "x-guild-id": s.sdk.guildId ?? "" } })

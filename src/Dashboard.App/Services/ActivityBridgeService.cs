@@ -7,7 +7,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
+using Dashboard.Core.Abstractions;
 using Dashboard.Core.Infrastructure;
+using Dashboard.Core.Services;
 
 namespace Dashboard.App.Services;
 
@@ -39,6 +41,7 @@ public sealed class ActivityBridgeService
     private readonly object _gate = new();
     private ActivityLink? _link;
     private string? _token;
+    private ActivityPublisher? _publisher;
 
     /// <param name="server">The Activity's Worker; links remember the server they were made on.</param>
     public ActivityBridgeService(string path, string? server = null)
@@ -48,6 +51,43 @@ public sealed class ActivityBridgeService
     }
 
     public event EventHandler? Changed;
+
+    /// <summary>
+    /// Phase 07: while linked, publish this PC's library summary and "now playing" to the Activity. Call once at
+    /// startup; the publisher follows the link (starts on link/load, stops on unlink).
+    /// </summary>
+    public void AttachSources(GameLibraryService library, IMediaService media)
+    {
+        _publisher = new ActivityPublisher(library, media, ForgetRevokedAsync);
+        Changed += (_, _) => SyncPublisher();
+        SyncPublisher();
+    }
+
+    private void SyncPublisher()
+    {
+        if (_publisher is null) return;
+        ActivityLink? link;
+        string? token;
+        lock (_gate)
+        {
+            link = _link;
+            token = _token;
+        }
+        if (link is not null && token is not null) _publisher.Start(link.Server, token);
+        else _publisher.Stop();
+    }
+
+    /// <summary>The server rejected the token (unlinked from the Activity): forget the link here too.</summary>
+    private async Task ForgetRevokedAsync()
+    {
+        lock (_gate)
+        {
+            _link = null;
+            _token = null;
+        }
+        await Task.Run(DeleteFile).ConfigureAwait(false);
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
 
     public ActivityLink? Link
     {
@@ -155,13 +195,7 @@ public sealed class ActivityBridgeService
             if (response.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
                 Log.Info("Activity: this pc was unlinked from the activity; forgetting the link");
-                lock (_gate)
-                {
-                    _link = null;
-                    _token = null;
-                }
-                await Task.Run(DeleteFile).ConfigureAwait(false);
-                Changed?.Invoke(this, EventArgs.Empty);
+                await ForgetRevokedAsync().ConfigureAwait(false);
                 return;
             }
             if (!response.IsSuccessStatusCode) return;

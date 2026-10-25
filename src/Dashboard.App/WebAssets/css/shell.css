@@ -555,6 +555,13 @@ kbd {
 .gamercard dl { display: grid; grid-template-columns: auto auto; gap: 4px 20px; margin: 0; font-size: 16px; }
 .gamercard dt { color: var(--muted); }
 .gamercard dd { margin: 0; }
+.gc-games { list-style: none; display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; padding: 0; max-width: 460px; }
+.gc-games li {
+  width: 52px; height: 74px; border-radius: 4px; overflow: hidden;
+  background: #222 center / cover no-repeat; box-shadow: 0 0 0 1px rgba(255,255,255,.35);
+  display: grid; place-items: center; text-align: center; font-size: 9px; padding: 3px; line-height: 1.1;
+}
+.gc-games li.more { background: none; box-shadow: none; font-size: 13px; color: var(--muted); }
 
 .toast {
   position: absolute;

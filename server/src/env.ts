@@ -10,6 +10,8 @@ export interface Env {
   ROOMS: DurableObjectNamespace<import("./room").PlazaRoom>;
   /** The single Discord Gateway connection for presences (thought bubbles). */
   PRESENCE: DurableObjectNamespace<import("./presence-hub").PresenceHub>;
+  /** One DeviceHub per linked Windows PC (phase 07): its WebSocket, library and now playing. */
+  DEVICES: DurableObjectNamespace<import("./device-hub").DeviceHub>;
   /** Secret; without it the hub never connects and nobody gets bubbles. */
   DISCORD_BOT_TOKEN?: string;
   /** Overridable for local dev / tests only. */

@@ -38,6 +38,10 @@ class_name = "PlazaRoom"
 name = "PRESENCE"
 class_name = "PresenceHub"
 
+[[durable_objects.bindings]]
+name = "DEVICES"
+class_name = "DeviceHub"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["PlazaRoom"]
@@ -45,6 +49,10 @@ new_sqlite_classes = ["PlazaRoom"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["PresenceHub"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["DeviceHub"]
 
 # Caps calls that reach Discord (token exchange, uncached sign-in checks), per client IP, so nobody can burn the
 # app's Discord rate limit. Inside Discord members may share the proxy's IPs; a launch costs about 2, so 60/min is ample.

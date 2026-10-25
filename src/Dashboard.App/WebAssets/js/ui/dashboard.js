@@ -532,6 +532,16 @@ export class Dashboard extends EventTarget {
       const dd = document.createElement("dd"); dd.textContent = v;
       return [dt, dd];
     }));
+    // card.games: [{ title, platform, cover }] from a linked PC; card.gameCount: the full library size.
+    const games = card?.games ?? [];
+    $("gc-games").hidden = games.length === 0;
+    $("gc-games").replaceChildren(...games.map((g) => {
+      const li = document.createElement("li");
+      li.title = `${g.title} (${g.platform})`;
+      if (g.cover) li.style.backgroundImage = `url("${g.cover}")`;
+      else li.textContent = g.title;
+      return li;
+    }), ...(card?.gameCount > games.length ? [Object.assign(document.createElement("li"), { className: "more", textContent: `+${card.gameCount - games.length}` })] : []));
     $("gamercard").hidden = false;
     this.sound("Select");
   }
